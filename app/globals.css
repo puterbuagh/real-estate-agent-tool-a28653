@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* HSL triplets — consumed via hsl(var(--token)) in tailwind config */
+    --background: 220 25% 99%;
+    --foreground: 222 35% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 35% 12%;
+
+    --muted: 220 20% 96%;
+    --muted-foreground: 220 12% 46%;
+
+    --primary: 201 58% 43%;            /* #2E86AB steel blue */
+    --primary-foreground: 220 25% 99%;
+
+    --secondary: 220 18% 95%;
+    --secondary-foreground: 222 30% 18%;
+
+    --accent: 220 20% 93%;
+    --accent-foreground: 222 30% 18%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 55% 42%;
+    --warning: 38 92% 50%;
+
+    --border: 220 16% 89%;
+    --input: 220 16% 89%;
+    --ring: 201 58% 43%;
+
+    /* Dark navy sidebar */
+    --sidebar: 220 38% 14%;
+    --sidebar-foreground: 220 25% 94%;
+    --sidebar-muted: 220 15% 65%;
+    --sidebar-border: 220 30% 22%;
+    --sidebar-accent: 220 30% 22%;
+    --sidebar-active: 201 58% 43%;
+
+    --radius: 0.625rem;
+
+    --font-display: 'Inter Tight', 'Inter', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+  }
+
+  .dark {
+    --background: 222 38% 10%;
+    --foreground: 220 20% 95%;
+    --card: 222 32% 13%;
+    --card-foreground: 220 20% 95%;
+    --muted: 222 28% 17%;
+    --muted-foreground: 220 12% 68%;
+    --secondary: 222 28% 17%;
+    --secondary-foreground: 220 20% 95%;
+    --accent: 222 28% 20%;
+    --accent-foreground: 220 20% 95%;
+    --border: 222 25% 22%;
+    --input: 222 25% 22%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  html, body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .font-display { font-family: var(--font-display); }
+  .font-body { font-family: var(--font-body); }
+
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+
+  .grid-pattern {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.6) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.6) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+  }
+}
+
+/* Print styles — used by Client Report view on Property Comparator */
+@media print {
+  @page {
+    margin: 0.5in;
+    size: letter;
+  }
+
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 35% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 35% 12%;
+    --muted: 220 20% 96%;
+    --muted-foreground: 220 12% 40%;
+    --border: 220 16% 80%;
+  }
+
+  html, body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Hide app chrome */
+  aside,
+  header.sticky,
+  [data-print-hide="true"],
+  .no-print {
+    display: none !important;
+  }
+
+  /* Reset main padding for print */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .lg\:pl-64 {
+    padding-left: 0 !important;
+  }
+
+  /* Force light tokens regardless of theme */
+  .dark {
+    --background: 0 0% 100%;
+    --foreground: 222 35% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 35% 12%;
+  }
+
+  /* Page break between properties in printable report */
+  [data-print-break="true"] {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  [data-print-break-inside="avoid"] {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Remove shadows/animations for print */
+  * {
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+}
