@@ -3,13 +3,13 @@ Stack: nextjs-supabase-vercel-stripe
 Created: 2026-05-16
 
 ## Decisions
-- Next.js 14.2.33 (App Router) with strict TypeScript and `@/*` path alias — pinned to patched release covering the 2025-12-11 security advisory
+- Next.js 14.2.37 (App Router) with strict TypeScript and `@/*` path alias — pinned to patched release clearing the security deprecation advisory
 - Tailwind with AgentDesk semantic tokens (navy sidebar, steel-blue primary, Inter Tight display + Inter body)
 - Design tokens stored as HSL triplets in `globals.css` to pair with `hsl(var(--token))` Tailwind wrappers
 - Print stylesheet in `globals.css` hides app chrome, forces light tokens, and exposes page-break utilities; adds `.no-print` and report-specific screen + print styles (A4 framing, page-break-inside avoid, display font for printed header/footer)
 - Supabase shared-schema client (browser + server) for cross-app data access
 - FRED API as live source for mortgage rates (MORTGAGE30US + MORTGAGE15US), proxied via cached Next route with 12-week history per series
-- `/api/mortgage-rate` returns `{ rate30yr: RateSeries, rate15yr: RateSeries }` with current value, week-over-week delta, and history points; `StatsGrid` is backward-compatible with this shape
+- `/api/mortgage-rate` returns `{ rate30yr: RateSeries, rate15yr: RateSeries }` with current value, week-over-week delta, and history points; `StatsGrid` is backward-compatible with this shape (legacy-shape fallback typing includes `currentDate`)
 - Market Stats page server-fetches the 30yr FRED rate and passes it as a prefill prop to `MortgageCalculator` and `AffordabilityCheck` for instant-loaded live-rate defaults
 - Zillow data via RapidAPI, proxied through `/api/property-lookup` with consistent `{ok, data|error}` envelope
 - RapidAPI key is server-only (`RAPIDAPI_KEY`, no `NEXT_PUBLIC_` prefix) — never exposed to the browser
@@ -30,7 +30,7 @@ Created: 2026-05-16
 ## Components
 - Layout: `Sidebar` (collapsible dark-navy nav incl. Client Report entry), `TopBar` (sticky, page title + date), `AppShell`
 - Pages: Dashboard (`/`), Property Comparator (2–5 addresses, parallel lookup, save/clear/print; calls `addComparison(properties, label?)` with positional args), Pipeline (kanban with summary bar + inline add form + DnD across stages), Market Stats (server-fetched live 30yr rate prefill + local inputs + mortgage calc + affordability), Client Report (`/client-report`, saved-comparison dropdown + agent branding + printable preview), Email Report (stub)
-- Dashboard widgets: `StatsGrid` (live FRED 30yr rate via new API shape, Florida labeling), `StatCard`, `RecentComparisons`, `QuickAddToPipeline`
+- Dashboard widgets: `StatsGrid` (live FRED 30yr rate via new API shape with legacy fallback typing incl. `currentDate`, Florida labeling), `StatCard`, `RecentComparisons`, `QuickAddToPipeline`
 - Comparator: `AddressInputs` (dynamic 2–5), `PropertySkeletonCard`, `PropertyCard` (Best/Highest Value badges), `PropertyErrorCard` (yellow no-data / red connection-error), `ComparisonTable` (scannable metrics, Best Value & Highest Value highlights, red >60 DOM), `ClientReport` (printable branded modal with per-property pages)
 - Pipeline: `AddPropertyForm` (inline address/price/client/stage/notes), `PipelineSummaryBar` (total value, per-stage counts, longest-sitting deal), `PipelineCard` (draggable, days-in-stage badge, expandable notes, delete), `KanbanBoard` (4 stage columns with HTML5 drag-and-drop)
 - Market Stats: `Sparkline` (token-styled inline SVG), `RateDisplay` (current rate, WoW delta, sparkline via correct `data` prop), `LiveRatesSection` (fetches /api/mortgage-rate with skeleton+retry, renders 30yr/15yr cards + FRED source caption), `LocalMarketInputs` (zod-validated, localStorage-persisted, edit/save toggle with 5 stat cards), `MortgageCalculator` (real-time P&I, live-rate prefill prop, 15/30yr term), `AffordabilityCheck` (28% DTI max-price calc with live-rate prefill prop + assumptions panel)
@@ -40,4 +40,4 @@ Created: 2026-05-16
 - API: `/api/mortgage-rate` (cached FRED proxy returning 30yr+15yr series with 12-week history + WoW deltas), `/api/property-lookup` (Zillow via RapidAPI; POST→`{ properties }`, GET→`{ property }`)
 - Lib: `lib/fred.ts` (multi-series helper), `lib/zillow.ts` (server-only RAPIDAPI_KEY; fetchPropertyByAddress + parallel lookups), `lib/utils.ts` (cn, currency/date/number/percent formatters, `daysBetween`, `calcMonthlyPayment`, `maxHomePriceForIncome`), `lib/supabase/{client,server}.ts`
 - Types: shared `types/index.ts` (incl. `ComparisonProperty`, `ComparisonResult` with reportNotes+clientName, extended `PipelineEntry`, `RateSeries`, `LocalMarketInputs`, `LocalMarketInputsData`, `MortgageCalc*`, `AgentBranding`)
-- Config: Tailwind tokens, PostCSS, `package.json` (next pinned to 14.2.33 for security patch), `.env.example` (Supabase shared-schema + `NEXT_PUBLIC_FRED_API_KEY` used by both /api/mortgage-rate and Market Stats + server-only `RAPIDAPI_KEY`), README
+- Config: Tailwind tokens, PostCSS, `package.json` (next pinned to 14.2.37 for security patch), `.env.example` (Supabase shared-schema + `NEXT_PUBLIC_FRED_API_KEY` used by both /api/mortgage-rate and Market Stats + server-only `RAPIDAPI_KEY`), README
