@@ -5,8 +5,15 @@ import { User, Phone, Mail, Building2 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import type { AgentBranding } from "@/app/client-report/page";
 
+const PLACEHOLDER_BRANDING: AgentBranding = {
+  name: "",
+  phone: "",
+  email: "",
+  brokerage: "",
+};
+
 export interface AgentBrandingFormProps {
-  value: AgentBranding;
+  value?: AgentBranding;
   onChange: (next: AgentBranding) => void;
 }
 
@@ -48,30 +55,32 @@ function Field({
 }
 
 function AgentBrandingForm({ value, onChange }: AgentBrandingFormProps) {
+  const safe: AgentBranding = value ?? PLACEHOLDER_BRANDING;
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field
         id="agent-name"
         label="Agent name"
         icon={User}
-        value={value.name}
-        onChange={(v) => onChange({ ...value, name: v })}
+        value={safe.name ?? ""}
+        onChange={(v) => onChange({ ...safe, name: v })}
         placeholder="Jordan Miller"
       />
       <Field
         id="agent-brokerage"
         label="Brokerage"
         icon={Building2}
-        value={value.brokerage}
-        onChange={(v) => onChange({ ...value, brokerage: v })}
+        value={safe.brokerage ?? ""}
+        onChange={(v) => onChange({ ...safe, brokerage: v })}
         placeholder="AgentDesk Realty"
       />
       <Field
         id="agent-phone"
         label="Phone"
         icon={Phone}
-        value={value.phone}
-        onChange={(v) => onChange({ ...value, phone: v })}
+        value={safe.phone ?? ""}
+        onChange={(v) => onChange({ ...safe, phone: v })}
         placeholder="(614) 555-0142"
         type="tel"
       />
@@ -79,8 +88,8 @@ function AgentBrandingForm({ value, onChange }: AgentBrandingFormProps) {
         id="agent-email"
         label="Email"
         icon={Mail}
-        value={value.email}
-        onChange={(v) => onChange({ ...value, email: v })}
+        value={safe.email ?? ""}
+        onChange={(v) => onChange({ ...safe, email: v })}
         placeholder="jordan@agentdesk.app"
         type="email"
       />
@@ -88,5 +97,5 @@ function AgentBrandingForm({ value, onChange }: AgentBrandingFormProps) {
   );
 }
 
-export { AgentBrandingForm };
+export { AgentBrandingForm, PLACEHOLDER_BRANDING };
 export default AgentBrandingForm;
