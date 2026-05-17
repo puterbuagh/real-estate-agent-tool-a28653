@@ -21,8 +21,8 @@ interface MortgageApiResponse {
   ok?: boolean;
   // New shape
   data?: {
-    thirtyYear?: { current?: number | null; history?: RatePoint[] };
-    fifteenYear?: { current?: number | null; history?: RatePoint[] };
+    thirtyYear?: { current?: number | null; currentDate?: string | null; history?: RatePoint[] };
+    fifteenYear?: { current?: number | null; currentDate?: string | null; history?: RatePoint[] };
     asOf?: string | null;
   };
   // Legacy shape (backward compatible)
