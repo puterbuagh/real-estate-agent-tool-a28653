@@ -2,6 +2,8 @@ import StatsGrid from '@/components/dashboard/StatsGrid';
 import RecentComparisons from '@/components/dashboard/RecentComparisons';
 import QuickAddToPipeline from '@/components/dashboard/QuickAddToPipeline';
 
+export const dynamic = 'force-dynamic';
+
 export default function DashboardPage() {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
