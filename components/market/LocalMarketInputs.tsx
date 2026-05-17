@@ -21,6 +21,15 @@ import type { LocalMarketInputsData } from "@/types";
 
 const STORAGE_KEY = "agentdesk:localMarket:v1";
 
+const PLACEHOLDER_DATA: LocalMarketInputsData = {
+  medianSalePrice: 0,
+  avgDaysOnMarket: 0,
+  listToSaleRatio: 0,
+  activeListings: 0,
+  newListingsThisMonth: 0,
+  updatedAt: "",
+};
+
 const schema = z.object({
   medianSalePrice: z
     .number({ invalid_type_error: "Required" })
@@ -127,6 +136,12 @@ function LocalMarketInputs() {
       ...parsed.data,
       updatedAt: new Date().toISOString(),
     };
+
+    if (typeof window === "undefined") {
+      setData(next);
+      setEditing(false);
+      return;
+    }
 
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -329,5 +344,5 @@ function LocalMarketInputs() {
   );
 }
 
-export { LocalMarketInputs };
+export { LocalMarketInputs, PLACEHOLDER_DATA };
 export default LocalMarketInputs;
