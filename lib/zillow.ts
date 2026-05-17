@@ -4,7 +4,7 @@ const ZILLOW_HOST = "zillow-com1.p.rapidapi.com";
 const ZILLOW_URL = `https://${ZILLOW_HOST}/property`;
 
 function hasUsableServerKey(): string | null {
-  const key = process.env.RAPIDAPI_KEY;
+  const key = process.env.NEXT_PUBLIC_RAPIDAPI_KEY;
   if (!key) return null;
   const trimmed = key.trim();
   if (!trimmed) return null;
@@ -93,7 +93,7 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
     return emptyProperty(
       trimmed,
       "error",
-      "Property lookup unavailable — connect a RapidAPI key (RAPIDAPI_KEY) to enable Zillow data."
+      "Property lookup unavailable — connect a RapidAPI key (NEXT_PUBLIC_RAPIDAPI_KEY) to enable Zillow data."
     );
   }
 
