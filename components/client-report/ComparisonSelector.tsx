@@ -25,30 +25,40 @@ function formatDate(iso: string): string {
 }
 
 function summarize(c: Comparison): string {
-  const addresses = c.properties
-    .map((p) => p.address)
-    .filter(Boolean)
+  const props = Array.isArray(c?.properties) ? c.properties : [];
+  const addresses = props
+    .map((p) => p?.address)
+    .filter((a): a is string => !!a)
     .slice(0, 2);
-  const extra = c.properties.length > 2 ? ` +${c.properties.length - 2} more` : "";
+  const extra = props.length > 2 ? ` +${props.length - 2} more` : "";
   const joined = addresses.join(" vs ") || "Comparison";
   return `${formatDate(c.createdAt)} — ${joined}${extra}`;
 }
 
-function ComparisonSelector({ comparisons, value, onChange }: ComparisonSelectorProps) {
+function ComparisonSelector({
+  comparisons,
+  value,
+  onChange,
+}: ComparisonSelectorProps) {
+  const safeList: Comparison[] = Array.isArray(comparisons) ? comparisons : [];
+
   const sorted = React.useMemo(
     () =>
-      [...comparisons].sort(
+      [...safeList].sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ),
-    [comparisons]
+    [safeList]
   );
 
   if (sorted.length === 0) {
     return (
       <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-border bg-muted/30 p-4">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <GitCompareArrows className="h-4 w-4 text-primary" aria-hidden="true" />
+          <GitCompareArrows
+            className="h-4 w-4 text-primary"
+            aria-hidden="true"
+          />
           No saved comparisons yet
         </div>
         <p className="text-xs text-muted-foreground">
@@ -66,7 +76,10 @@ function ComparisonSelector({ comparisons, value, onChange }: ComparisonSelector
 
   return (
     <div className="space-y-1.5">
-      <label htmlFor="comparison-select" className="text-xs font-medium text-foreground">
+      <label
+        htmlFor="comparison-select"
+        className="text-xs font-medium text-foreground"
+      >
         Saved comparison
       </label>
       <Select
@@ -82,7 +95,8 @@ function ComparisonSelector({ comparisons, value, onChange }: ComparisonSelector
         ))}
       </Select>
       <p className="text-[11px] text-muted-foreground">
-        {sorted.length} saved {sorted.length === 1 ? "comparison" : "comparisons"}
+        {sorted.length} saved{" "}
+        {sorted.length === 1 ? "comparison" : "comparisons"}
       </p>
     </div>
   );
