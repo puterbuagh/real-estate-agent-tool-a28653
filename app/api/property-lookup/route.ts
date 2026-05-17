@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 function hasUsableKey(): boolean {
-  const key = process.env.RAPIDAPI_KEY;
+  const key = process.env.NEXT_PUBLIC_RAPIDAPI_KEY;
   if (!key) return false;
   const trimmed = key.trim();
   if (!trimmed) return false;
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       status: "error",
       error: "missing_key",
       message:
-        "Property lookup unavailable — connect a RapidAPI key (RAPIDAPI_KEY) to enable Zillow data.",
+        "Property lookup unavailable — connect a RapidAPI key (NEXT_PUBLIC_RAPIDAPI_KEY) to enable Zillow data.",
     });
   }
 
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       ok: false,
       error: "missing_key",
       message:
-        "Property lookup unavailable — connect a RapidAPI key (RAPIDAPI_KEY) to enable Zillow data.",
+        "Property lookup unavailable — connect a RapidAPI key (NEXT_PUBLIC_RAPIDAPI_KEY) to enable Zillow data.",
       properties: [],
     });
   }
