@@ -29,7 +29,7 @@ function hasUsableServiceConfig(): { url: string; key: string } | null {
 
 /**
  * Server-side Supabase client for use in Server Components, Route Handlers,
- * and Server Actions. Honors shared-schema mode via SUPABASE_SCHEMA.
+ * and Server Actions. Honors shared-schema mode via NEXT_PUBLIC_SUPABASE_SCHEMA.
  *
  * Returns null on failure (missing env vars, placeholder values, cookie
  * access failure, etc.) so server components never throw uncaught errors
@@ -49,7 +49,7 @@ export function createSupabaseServerClient() {
 
     return createServerClient(config.url, config.anon, {
       db: {
-        schema: process.env.SUPABASE_SCHEMA || "public",
+        schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "public",
       },
       cookies: {
         get(name: string) {
@@ -92,7 +92,7 @@ export function createSupabaseServiceRoleClient() {
 
     return createServerClient(config.url, config.key, {
       db: {
-        schema: process.env.SUPABASE_SCHEMA || "public",
+        schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "public",
       },
       cookies: {
         get() {
