@@ -1,20 +1,44 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+function hasUsableConfig(): { url: string; anon: string } | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) return null;
+  const u = url.trim();
+  const a = anon.trim();
+  if (!u || !a) return null;
+  if (u.toLowerCase().includes("your-") || u.toLowerCase().includes("placeholder")) return null;
+  if (a.toLowerCase().includes("your-") || a.toLowerCase().includes("placeholder")) return null;
+  if (!u.startsWith("http")) return null;
+  return { url: u, anon: a };
+}
+
+function hasUsableServiceConfig(): { url: string; key: string } | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  const u = url.trim();
+  const k = key.trim();
+  if (!u || !k) return null;
+  if (u.toLowerCase().includes("your-") || u.toLowerCase().includes("placeholder")) return null;
+  if (k.toLowerCase().includes("your-") || k.toLowerCase().includes("placeholder")) return null;
+  if (!u.startsWith("http")) return null;
+  return { url: u, key: k };
+}
+
 /**
  * Server-side Supabase client for use in Server Components, Route Handlers,
- * and Server Actions. Honors the shared-schema mode by binding every query
- * to the schema named in SUPABASE_SCHEMA (falls back to "public").
+ * and Server Actions. Honors shared-schema mode via SUPABASE_SCHEMA.
  *
- * Returns null on failure (missing env vars, cookie access failure, etc.)
- * so that server components never throw uncaught errors during prerender.
+ * Returns null on failure (missing env vars, placeholder values, cookie
+ * access failure, etc.) so server components never throw uncaught errors
+ * during prerender — critical for building without keys configured.
  */
 export function createSupabaseServerClient() {
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!url || !anonKey) return null;
+    const config = hasUsableConfig();
+    if (!config) return null;
 
     let cookieStore: ReturnType<typeof cookies>;
     try {
@@ -23,7 +47,7 @@ export function createSupabaseServerClient() {
       return null;
     }
 
-    return createServerClient(url, anonKey, {
+    return createServerClient(config.url, config.anon, {
       db: {
         schema: process.env.SUPABASE_SCHEMA || "public",
       },
@@ -59,17 +83,14 @@ export function createSupabaseServerClient() {
 /**
  * Service-role server client. Use ONLY in trusted server contexts
  * (cron jobs, webhooks, admin routes). Never expose to the browser.
- *
  * Returns null on failure instead of throwing.
  */
 export function createSupabaseServiceRoleClient() {
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const config = hasUsableServiceConfig();
+    if (!config) return null;
 
-    if (!url || !serviceKey) return null;
-
-    return createServerClient(url, serviceKey, {
+    return createServerClient(config.url, config.key, {
       db: {
         schema: process.env.SUPABASE_SCHEMA || "public",
       },
@@ -92,8 +113,8 @@ export function createSupabaseServiceRoleClient() {
 
 /**
  * Safe query helper — wraps a Supabase query and returns a fallback value
- * on any failure (including missing client). Use this to guarantee that
- * server components rendering during prerender never throw.
+ * on any failure (including missing client). Guarantees server components
+ * rendering during prerender never throw.
  */
 export async function safeQuery<T>(
   runner: () => Promise<{ data: T | null; error: unknown }>,
