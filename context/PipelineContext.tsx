@@ -28,7 +28,7 @@ export interface AddPipelineItemInput {
   notes?: string;
 }
 
-interface PipelineContextValue {
+export interface PipelineContextValue {
   pipeline: PipelineItem[];
   comparisons: Comparison[];
   comparisonsThisMonth: number;
@@ -49,13 +49,30 @@ interface PipelineContextValue {
   updateComparisonClientName: (id: string, clientName: string) => void;
 }
 
-const PipelineContext = createContext<PipelineContextValue | undefined>(
-  undefined
-);
+const DEFAULT_CONTEXT: PipelineContextValue = {
+  pipeline: [],
+  comparisons: [],
+  comparisonsThisMonth: 0,
+  addPipelineItem: () => {},
+  removePipelineItem: () => {},
+  updatePipelineStage: () => {},
+  updatePipelineNotes: () => {},
+  addComparison: () => null,
+  deleteComparison: () => {},
+  getComparisonById: () => undefined,
+  updateComparisonNotes: () => {},
+  updateComparisonClientName: () => {},
+};
+
+const PipelineContext = createContext<PipelineContextValue>(DEFAULT_CONTEXT);
 
 function generateId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
+  try {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // ignore
   }
   return `id_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -70,6 +87,7 @@ function safeParse<T>(value: string | null, fallback: T): T {
 }
 
 function normalizePipeline(items: PipelineItem[]): PipelineItem[] {
+  if (!Array.isArray(items)) return [];
   return items.map((item) => ({
     ...item,
     stageEnteredAt: item.stageEnteredAt ?? item.createdAt,
@@ -79,39 +97,61 @@ function normalizePipeline(items: PipelineItem[]): PipelineItem[] {
   }));
 }
 
+function readLocalStorage(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalStorage(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // ignore quota / privacy mode
+  }
+}
+
 export function PipelineProvider({ children }: { children: ReactNode }) {
   const [pipeline, setPipeline] = useState<PipelineItem[]>([]);
   const [comparisons, setComparisons] = useState<Comparison[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = safeParse<PipelineItem[]>(
-      window.localStorage.getItem(PIPELINE_KEY),
-      []
-    );
-    setPipeline(normalizePipeline(stored));
-    setComparisons(
-      safeParse<Comparison[]>(window.localStorage.getItem(COMPARISONS_KEY), [])
-    );
-    setHydrated(true);
+    try {
+      const storedPipeline = safeParse<PipelineItem[]>(
+        readLocalStorage(PIPELINE_KEY),
+        []
+      );
+      setPipeline(normalizePipeline(storedPipeline));
+
+      const storedComparisons = safeParse<Comparison[]>(
+        readLocalStorage(COMPARISONS_KEY),
+        []
+      );
+      setComparisons(Array.isArray(storedComparisons) ? storedComparisons : []);
+    } catch {
+      // ignore
+    } finally {
+      setHydrated(true);
+    }
   }, []);
 
   useEffect(() => {
-    if (!hydrated || typeof window === "undefined") return;
-    window.localStorage.setItem(PIPELINE_KEY, JSON.stringify(pipeline));
+    if (!hydrated) return;
+    writeLocalStorage(PIPELINE_KEY, JSON.stringify(pipeline));
   }, [pipeline, hydrated]);
 
   useEffect(() => {
-    if (!hydrated || typeof window === "undefined") return;
-    window.localStorage.setItem(COMPARISONS_KEY, JSON.stringify(comparisons));
+    if (!hydrated) return;
+    writeLocalStorage(COMPARISONS_KEY, JSON.stringify(comparisons));
   }, [comparisons, hydrated]);
 
   const addPipelineItem = useCallback(
-    (
-      addressOrInput: string | AddPipelineItemInput,
-      stage?: PipelineStage
-    ) => {
+    (addressOrInput: string | AddPipelineItemInput, stage?: PipelineStage) => {
       const now = new Date().toISOString();
       let item: PipelineItem;
       if (typeof addressOrInput === "string") {
@@ -160,13 +200,11 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
   );
 
   const updatePipelineNotes = useCallback((id: string, notes: string) => {
-    setPipeline((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, notes } : p))
-    );
+    setPipeline((prev) => prev.map((p) => (p.id === id ? { ...p, notes } : p)));
   }, []);
 
   const addComparison = useCallback(
-    (properties: ComparisonProperty[], label?: string): Comparison | null => {
+    (properties: ComparisonProperty[], _label?: string): Comparison | null => {
       if (!properties || properties.length === 0) return null;
 
       const compared: ComparedProperty[] = properties.map((p) => ({
@@ -187,9 +225,6 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
         reportNotes: {},
         clientName: null,
       };
-      if (label) {
-        // reserved for future labeling
-      }
       setComparisons((prev) => [entry, ...prev]);
       return entry;
     },
@@ -272,11 +307,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
 }
 
 export function usePipeline(): PipelineContextValue {
-  const ctx = useContext(PipelineContext);
-  if (!ctx) {
-    throw new Error("usePipeline must be used within a PipelineProvider");
-  }
-  return ctx;
+  return useContext(PipelineContext);
 }
 
 export default PipelineProvider;
