@@ -5,7 +5,8 @@ import MortgageCalculator from "@/components/market/MortgageCalculator";
 import AffordabilityCheck from "@/components/market/AffordabilityCheck";
 import { fetchMortgageRates } from "@/lib/fred";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function SectionHeader({
   eyebrow,
@@ -40,7 +41,12 @@ async function getLiveRate(): Promise<number | null> {
 }
 
 async function MarketStatsPage() {
-  const liveRate = await getLiveRate();
+  let liveRate: number | null = null;
+  try {
+    liveRate = await getLiveRate();
+  } catch {
+    liveRate = null;
+  }
 
   return (
     <div className="space-y-10">
