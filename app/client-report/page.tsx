@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
 import { usePipeline } from "@/context/PipelineContext";
@@ -10,6 +11,11 @@ import ReportPreview from "@/components/client-report/ReportPreview";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import type { Comparison } from "@/types";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+export const runtime = "nodejs";
 
 export interface AgentBranding {
   name: string;
@@ -28,7 +34,7 @@ export const DEFAULT_BRANDING: AgentBranding = {
 const BRANDING_KEY = "agentdesk:agent-branding:v1";
 const CLIENT_NAME_KEY = "agentdesk:client-report:client-name";
 
-function ClientReportPage() {
+function ClientReportInner() {
   const [mounted, setMounted] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [branding, setBranding] = React.useState<AgentBranding>(DEFAULT_BRANDING);
@@ -85,6 +91,94 @@ function ClientReportPage() {
     return comparisons.find((c) => c.id === selectedId) ?? null;
   }, [selectedId, comparisons]);
 
+  if (!mounted) {
+    return (
+      <Card className="p-8">
+        <div className="space-y-3">
+          <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+          <div className="h-3 w-72 animate-pulse rounded bg-muted" />
+          <div className="h-32 w-full animate-pulse rounded bg-muted" />
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <section
+        className="grid gap-6 lg:grid-cols-[1fr_1fr] no-print"
+        data-print-hide="true"
+      >
+        <Card className="p-6 space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold tracking-tight">
+              1. Pick a comparison
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Pulls from comparisons you&rsquo;ve saved on the Property Comparator.
+            </p>
+          </div>
+          <ComparisonSelector
+            comparisons={comparisons}
+            value={selectedId}
+            onChange={setSelectedId}
+          />
+
+          <div className="pt-2 border-t border-border">
+            <label
+              htmlFor="client-name"
+              className="text-xs font-medium text-foreground"
+            >
+              Client name
+            </label>
+            <Input
+              id="client-name"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              placeholder="e.g. The Reynolds Family"
+              className="mt-1.5"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Appears on the cover as &ldquo;Prepared exclusively for&hellip;&rdquo;
+            </p>
+          </div>
+        </Card>
+
+        <Card className="p-6 space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold tracking-tight">
+              2. Your branding
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Saved to this browser. Fill once, reuse for every client.
+            </p>
+          </div>
+          <AgentBrandingForm value={branding} onChange={setBranding} />
+        </Card>
+      </section>
+
+      <ReportPreview
+        comparison={selected}
+        branding={branding}
+        clientName={clientName}
+      />
+    </>
+  );
+}
+
+function ClientReportFallback() {
+  return (
+    <Card className="p-8">
+      <div className="space-y-3">
+        <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+        <div className="h-3 w-72 animate-pulse rounded bg-muted" />
+        <div className="h-32 w-full animate-pulse rounded bg-muted" />
+      </div>
+    </Card>
+  );
+}
+
+function ClientReportPage() {
   return (
     <div className="space-y-8">
       <header
@@ -103,75 +197,9 @@ function ClientReportPage() {
         </p>
       </header>
 
-      {!mounted ? (
-        <Card className="p-8">
-          <div className="space-y-3">
-            <div className="h-4 w-48 animate-pulse rounded bg-muted" />
-            <div className="h-3 w-72 animate-pulse rounded bg-muted" />
-            <div className="h-32 w-full animate-pulse rounded bg-muted" />
-          </div>
-        </Card>
-      ) : (
-        <>
-          <section
-            className="grid gap-6 lg:grid-cols-[1fr_1fr] no-print"
-            data-print-hide="true"
-          >
-            <Card className="p-6 space-y-4">
-              <div>
-                <h2 className="font-display text-lg font-semibold tracking-tight">
-                  1. Pick a comparison
-                </h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Pulls from comparisons you&rsquo;ve saved on the Property Comparator.
-                </p>
-              </div>
-              <ComparisonSelector
-                comparisons={comparisons}
-                value={selectedId}
-                onChange={setSelectedId}
-              />
-
-              <div className="pt-2 border-t border-border">
-                <label
-                  htmlFor="client-name"
-                  className="text-xs font-medium text-foreground"
-                >
-                  Client name
-                </label>
-                <Input
-                  id="client-name"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="e.g. The Reynolds Family"
-                  className="mt-1.5"
-                />
-                <p className="text-[11px] text-muted-foreground mt-1.5">
-                  Appears on the cover as &ldquo;Prepared exclusively for&hellip;&rdquo;
-                </p>
-              </div>
-            </Card>
-
-            <Card className="p-6 space-y-4">
-              <div>
-                <h2 className="font-display text-lg font-semibold tracking-tight">
-                  2. Your branding
-                </h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Saved to this browser. Fill once, reuse for every client.
-                </p>
-              </div>
-              <AgentBrandingForm value={branding} onChange={setBranding} />
-            </Card>
-          </section>
-
-          <ReportPreview
-            comparison={selected}
-            branding={branding}
-            clientName={clientName}
-          />
-        </>
-      )}
+      <Suspense fallback={<ClientReportFallback />}>
+        <ClientReportInner />
+      </Suspense>
     </div>
   );
 }
