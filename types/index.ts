@@ -78,6 +78,16 @@ export interface Comparison {
   properties: ComparedProperty[];
   winnerAddress: string | null;
   winnerZestimate: number | null;
+  reportNotes?: Record<string, string>;
+  clientName?: string | null;
+}
+
+export interface AgentBranding {
+  name: string;
+  phone: string;
+  email: string;
+  brokerage?: string;
+  logoUrl?: string;
 }
 
 export interface FredObservation {
@@ -114,10 +124,6 @@ export interface MortgageRatesPayload {
   asOf: string;
 }
 
-/**
- * Legacy/optional shape — kept for backward compatibility with any
- * consumer that expects nullable fields.
- */
 export interface LocalMarketInputs {
   medianSalePrice: number | null;
   avgDaysOnMarket: number | null;
@@ -127,10 +133,6 @@ export interface LocalMarketInputs {
   updatedAt: string | null;
 }
 
-/**
- * Concrete persisted shape used by the Local Market Inputs panel.
- * All numeric fields are non-null once saved; `updatedAt` is an ISO string.
- */
 export interface LocalMarketInputsData {
   medianSalePrice: number;
   avgDaysOnMarket: number;
