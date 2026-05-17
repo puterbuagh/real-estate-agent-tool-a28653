@@ -26,10 +26,11 @@ Created: 2026-05-16
 - Kanban drag-and-drop uses native HTML5 DnD (no external lib) for lightweight stage transitions
 - Honeypot pattern for spam protection on quick-add forms
 - Prefer `type` aliases over empty `interface` extensions to satisfy strict lint
+- `/client-report` opts out of static prerender (`export const dynamic = 'force-dynamic'` + `revalidate = 0`); the `useSearchParams`-consuming inner client component is wrapped in a `Suspense` boundary to satisfy Next 14 CSR-bailout prerender rules on Vercel
 
 ## Components
 - Layout: `Sidebar` (collapsible dark-navy nav incl. Client Report entry), `TopBar` (sticky, page title + date), `AppShell`
-- Pages: Dashboard (`/`), Property Comparator (2–5 addresses, parallel lookup, save/clear/print; calls `addComparison(properties, label?)` with positional args), Pipeline (kanban with summary bar + inline add form + DnD across stages), Market Stats (server-fetched live 30yr rate prefill + local inputs + mortgage calc + affordability), Client Report (`/client-report`, saved-comparison dropdown + agent branding + printable preview), Email Report (stub)
+- Pages: Dashboard (`/`), Property Comparator (2–5 addresses, parallel lookup, save/clear/print; calls `addComparison(properties, label?)` with positional args), Pipeline (kanban with summary bar + inline add form + DnD across stages), Market Stats (server-fetched live 30yr rate prefill + local inputs + mortgage calc + affordability), Client Report (`/client-report`, force-dynamic + Suspense-wrapped inner component reading `?comparisonId=`, saved-comparison dropdown + agent branding + printable preview), Email Report (stub)
 - Dashboard widgets: `StatsGrid` (live FRED 30yr rate via new API shape with legacy fallback typing incl. `currentDate`, Florida labeling), `StatCard`, `RecentComparisons`, `QuickAddToPipeline`
 - Comparator: `AddressInputs` (dynamic 2–5), `PropertySkeletonCard`, `PropertyCard` (Best/Highest Value badges), `PropertyErrorCard` (yellow no-data / red connection-error), `ComparisonTable` (scannable metrics, Best Value & Highest Value highlights, red >60 DOM), `ClientReport` (printable branded modal with per-property pages)
 - Pipeline: `AddPropertyForm` (inline address/price/client/stage/notes), `PipelineSummaryBar` (total value, per-stage counts, longest-sitting deal), `PipelineCard` (draggable, days-in-stage badge, expandable notes, delete), `KanbanBoard` (4 stage columns with HTML5 drag-and-drop)
