@@ -3,7 +3,7 @@ Stack: nextjs-supabase-vercel-stripe
 Created: 2026-05-16
 
 ## Decisions
-- Next.js 14.2.37 (App Router) with strict TypeScript and `@/*` path alias — pinned to patched release clearing the security deprecation advisory
+- Next.js 14.2.33 (App Router) with strict TypeScript and `@/*` path alias — pinned to published patched release clearing the security deprecation advisory (14.2.37 was non-existent and caused ETARGET install failures)
 - Tailwind with AgentDesk semantic tokens (navy sidebar, steel-blue primary, Inter Tight display + Inter body)
 - Design tokens stored as HSL triplets in `globals.css` to pair with `hsl(var(--token))` Tailwind wrappers
 - Print stylesheet in `globals.css` hides app chrome, forces light tokens, and exposes page-break utilities; adds `.no-print` and report-specific screen + print styles (A4 framing, page-break-inside avoid, display font for printed header/footer)
@@ -40,4 +40,4 @@ Created: 2026-05-16
 - API: `/api/mortgage-rate` (cached FRED proxy returning 30yr+15yr series with 12-week history + WoW deltas), `/api/property-lookup` (Zillow via RapidAPI; POST→`{ properties }`, GET→`{ property }`)
 - Lib: `lib/fred.ts` (multi-series helper), `lib/zillow.ts` (server-only RAPIDAPI_KEY; fetchPropertyByAddress + parallel lookups), `lib/utils.ts` (cn, currency/date/number/percent formatters, `daysBetween`, `calcMonthlyPayment`, `maxHomePriceForIncome`), `lib/supabase/{client,server}.ts`
 - Types: shared `types/index.ts` (incl. `ComparisonProperty`, `ComparisonResult` with reportNotes+clientName, extended `PipelineEntry`, `RateSeries`, `LocalMarketInputs`, `LocalMarketInputsData`, `MortgageCalc*`, `AgentBranding`)
-- Config: Tailwind tokens, PostCSS, `package.json` (next pinned to 14.2.37 for security patch), `.env.example` (Supabase shared-schema + `NEXT_PUBLIC_FRED_API_KEY` used by both /api/mortgage-rate and Market Stats + server-only `RAPIDAPI_KEY`), README
+- Config: Tailwind tokens, PostCSS, `package.json` (next pinned to 14.2.33 — valid published security patch), `.env.example` (Supabase shared-schema + `NEXT_PUBLIC_FRED_API_KEY` used by both /api/mortgage-rate and Market Stats + server-only `RAPIDAPI_KEY`), README
