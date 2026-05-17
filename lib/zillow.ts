@@ -3,6 +3,16 @@ import type { ZillowProperty, ComparisonProperty, ComparisonResult } from "@/typ
 const ZILLOW_HOST = "zillow-com1.p.rapidapi.com";
 const ZILLOW_URL = `https://${ZILLOW_HOST}/property`;
 
+function hasUsableServerKey(): string | null {
+  const key = process.env.RAPIDAPI_KEY;
+  if (!key) return null;
+  const trimmed = key.trim();
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase().includes("your-")) return null;
+  if (trimmed.toLowerCase().includes("placeholder")) return null;
+  return trimmed;
+}
+
 function toNumber(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : Number(v);
@@ -48,13 +58,14 @@ function formattedAddress(raw: Record<string, unknown> | null | undefined, fallb
   return fallback;
 }
 
-export async function fetchZillowProperty(address: string): Promise<ZillowProperty> {
-  const trimmed = address.trim();
-  const apiKey = process.env.RAPIDAPI_KEY;
-
-  const empty = (status: "no_data" | "error", errorMessage?: string): ZillowProperty => ({
+function emptyProperty(
+  address: string,
+  status: "no_data" | "error",
+  errorMessage?: string
+): ZillowProperty {
+  return {
     zpid: null,
-    address: trimmed,
+    address,
     price: null,
     zestimate: null,
     bedrooms: null,
@@ -71,10 +82,19 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
     photo: null,
     status,
     errorMessage,
-  });
+  };
+}
+
+export async function fetchZillowProperty(address: string): Promise<ZillowProperty> {
+  const trimmed = address.trim();
+  const apiKey = hasUsableServerKey();
 
   if (!apiKey) {
-    return empty("error", "Missing RapidAPI key (RAPIDAPI_KEY).");
+    return emptyProperty(
+      trimmed,
+      "error",
+      "Property lookup unavailable — connect a RapidAPI key (RAPIDAPI_KEY) to enable Zillow data."
+    );
   }
 
   try {
@@ -89,14 +109,14 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
     });
 
     if (!res.ok) {
-      if (res.status === 404) return empty("no_data");
-      return empty("error", `Zillow request failed (${res.status})`);
+      if (res.status === 404) return emptyProperty(trimmed, "no_data");
+      return emptyProperty(trimmed, "error", `Zillow request failed (${res.status})`);
     }
 
     const raw = (await res.json()) as Record<string, unknown>;
 
     if (!raw || (raw.error && !raw.zpid)) {
-      return empty("no_data");
+      return emptyProperty(trimmed, "no_data");
     }
 
     const price =
@@ -134,7 +154,7 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Network error";
-    return empty("error", message);
+    return emptyProperty(trimmed, "error", message);
   }
 }
 
@@ -180,29 +200,33 @@ export async function fetchPropertyByAddress(address: string): Promise<Compariso
       cache: "no-store",
     });
 
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => null)) as
-        | { property?: ZillowProperty; error?: string }
-        | null;
-      const fallbackProperty = payload?.property;
-      if (fallbackProperty?.status === "no_data") {
-        return { kind: "empty", address: trimmed };
-      }
+    const data = (await res.json().catch(() => null)) as
+      | {
+          ok?: boolean;
+          property?: ZillowProperty;
+          error?: string;
+          message?: string;
+        }
+      | null;
+
+    if (!data) {
+      return {
+        kind: "error",
+        address: trimmed,
+        message: "Data unavailable — check your connection",
+      };
+    }
+
+    if (data.error === "missing_key") {
       return {
         kind: "error",
         address: trimmed,
         message:
-          fallbackProperty?.errorMessage ||
-          payload?.error ||
-          "Data unavailable — check your connection",
+          data.message ??
+          "Property lookup unavailable — connect a RapidAPI key to enable Zillow data.",
       };
     }
 
-    const data = (await res.json()) as {
-      ok?: boolean;
-      property?: ZillowProperty;
-      error?: string;
-    };
     const property = data.property;
 
     if (!property || property.status === "error") {
