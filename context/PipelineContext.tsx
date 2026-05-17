@@ -44,6 +44,9 @@ interface PipelineContextValue {
     label?: string
   ) => Comparison | null;
   deleteComparison: (id: string) => void;
+  getComparisonById: (id: string) => Comparison | undefined;
+  updateComparisonNotes: (id: string, notes: Record<string, string>) => void;
+  updateComparisonClientName: (id: string, clientName: string) => void;
 }
 
 const PipelineContext = createContext<PipelineContextValue | undefined>(
@@ -181,6 +184,8 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
         properties: compared,
         winnerAddress: winner?.address ?? null,
         winnerZestimate: winner?.zestimate ?? null,
+        reportNotes: {},
+        clientName: null,
       };
       if (label) {
         // reserved for future labeling
@@ -194,6 +199,29 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
   const deleteComparison = useCallback((id: string) => {
     setComparisons((prev) => prev.filter((c) => c.id !== id));
   }, []);
+
+  const getComparisonById = useCallback(
+    (id: string) => comparisons.find((c) => c.id === id),
+    [comparisons]
+  );
+
+  const updateComparisonNotes = useCallback(
+    (id: string, notes: Record<string, string>) => {
+      setComparisons((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, reportNotes: notes } : c))
+      );
+    },
+    []
+  );
+
+  const updateComparisonClientName = useCallback(
+    (id: string, clientName: string) => {
+      setComparisons((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, clientName } : c))
+      );
+    },
+    []
+  );
 
   const comparisonsThisMonth = useMemo(() => {
     const now = new Date();
@@ -216,6 +244,9 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
       updatePipelineNotes,
       addComparison,
       deleteComparison,
+      getComparisonById,
+      updateComparisonNotes,
+      updateComparisonClientName,
     }),
     [
       pipeline,
@@ -227,6 +258,9 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
       updatePipelineNotes,
       addComparison,
       deleteComparison,
+      getComparisonById,
+      updateComparisonNotes,
+      updateComparisonClientName,
     ]
   );
 
