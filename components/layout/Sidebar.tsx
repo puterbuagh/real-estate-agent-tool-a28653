@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, GitCompare, Briefcase, BarChart3, Mail, X, Building2 } from "lucide-react";
+import { LayoutDashboard, GitCompare, Briefcase, BarChart3, FileText, Mail, X, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ const navItems = [
   { href: "/property-comparator", label: "Property Comparator", icon: GitCompare },
   { href: "/pipeline", label: "My Pipeline", icon: Briefcase },
   { href: "/market-stats", label: "Market Stats", icon: BarChart3 },
+  { href: "/client-report", label: "Client Report", icon: FileText },
   { href: "/email-report", label: "Email Client Report", icon: Mail },
 ];
 
