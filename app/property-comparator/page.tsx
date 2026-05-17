@@ -10,7 +10,7 @@ import PropertyCard from "@/components/comparator/PropertyCard";
 import PropertySkeletonCard from "@/components/comparator/PropertySkeletonCard";
 import { usePipeline } from "@/context/PipelineContext";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
-import type { ZillowProperty } from "@/types";
+import type { ZillowProperty, ComparisonProperty } from "@/types";
 
 const AGENT = {
   name: "Jordan Miller",
@@ -127,18 +127,30 @@ function PropertyComparatorPage() {
       toast.error("Nothing to save yet — run a comparison first.");
       return;
     }
-    const compared = successful.map((p) => ({
+    const compared: ComparisonProperty[] = successful.map((p) => ({
+      zpid: p.zpid,
       address: p.address,
+      price: p.price,
       zestimate: p.zestimate,
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      livingArea: p.livingArea,
+      lotSize: p.lotSize,
+      yearBuilt: p.yearBuilt,
+      propertyType: p.propertyType,
+      daysOnMarket: p.daysOnMarket,
+      pricePerSqft: p.pricePerSqft,
+      lastSoldPrice: p.lastSoldPrice,
+      lastSoldDate: p.lastSoldDate,
+      taxAssessedValue: p.taxAssessedValue,
+      photo: p.photo,
     }));
-    const winner = [...successful]
-      .filter((p) => typeof p.zestimate === "number")
-      .sort((a, b) => (b.zestimate ?? 0) - (a.zestimate ?? 0))[0];
-    addComparison({
-      properties: compared,
-      winnerAddress: winner?.address ?? null,
-      winnerZestimate: winner?.zestimate ?? null,
-    });
+    const label = compared
+      .map((p) => p.address)
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(" vs ");
+    addComparison(compared, label || undefined);
     toast.success("Comparison saved to your dashboard.");
   }
 
