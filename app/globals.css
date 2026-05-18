@@ -75,6 +75,11 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* Prevent horizontal overflow from wide tables/cards breaking the shell */
+  html, body {
+    overflow-x: hidden;
+  }
+
   h1, h2, h3, h4 {
     font-family: var(--font-display);
     letter-spacing: -0.02em;
@@ -150,6 +155,7 @@
   html, body {
     background: white !important;
     color: black !important;
+    overflow: visible !important;
   }
 
   aside,
@@ -162,10 +168,16 @@
   main {
     padding: 0 !important;
     margin: 0 !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    padding-left: 0 !important;
   }
 
-  .lg\:pl-64 {
+  /* Reset any sidebar-offset utilities for print without relying on JIT class names */
+  [data-app-main="true"] {
+    margin-left: 0 !important;
     padding-left: 0 !important;
+    max-width: 100% !important;
   }
 
   .dark {
