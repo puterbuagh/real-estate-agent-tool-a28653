@@ -9,7 +9,7 @@ A professional real estate agent tool dashboard built for an Ohio real estate ag
 - Supabase (shared-schema mode) via `@supabase/ssr`
 - FRED API for live 30yr + 15yr fixed mortgage rates
 - RapidAPI (Zillow Live Data Scraper) for property lookups
-- Google Places (optional, per-agent key) for address autocomplete
+- Google Places Autocomplete (`@googlemaps/js-api-loader`) for address inputs in the Property Comparator
 - Recharts, framer-motion, lucide-react, sonner
 
 ## Getting Started
@@ -29,10 +29,10 @@ A professional real estate agent tool dashboard built for an Ohio real estate ag
    - `RAPIDAPI_KEY` — server-only. Subscribe to the `zillow-com-live-data-scraper-api` host on RapidAPI.
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — Supabase credentials.
    - `NEXT_PUBLIC_SUPABASE_SCHEMA` — dedicated Postgres schema name (e.g. `agentdesk`).
-   - `GOOGLE_API_KEY` *(optional, server-only)* — fallback Google Maps/Places key used by server routes when the signed-in agent has not supplied their own.
-   - `NEXT_PUBLIC_GOOGLE_API_KEY` *(optional)* — fallback Google Places key for browser-side autocomplete when the signed-in agent has not supplied their own.
+   - `GOOGLE_API_KEY` *(optional, server-only)* — fallback Google Maps Platform key used by `/api/google-api-key` when the signed-in agent has not supplied their own.
+   - `NEXT_PUBLIC_GOOGLE_API_KEY` *(optional, legacy)* — historical client-side fallback. Prefer the per-agent key or `GOOGLE_API_KEY`.
 
-   ⚠️ Neither `FRED_API_KEY` nor `RAPIDAPI_KEY` is prefixed with `NEXT_PUBLIC_` — they are server-only secrets and must never be exposed to the browser bundle. All upstream calls are proxied through Next.js route handlers.
+   ⚠️ `FRED_API_KEY`, `RAPIDAPI_KEY`, and `GOOGLE_API_KEY` are not prefixed with `NEXT_PUBLIC_` — they are server-only secrets and must never be exposed to the browser bundle. The browser fetches the Google key at runtime through the auth-gated `/api/google-api-key` route handler.
 
 3. Run the dev server:
    ```bash
@@ -41,32 +41,55 @@ A professional real estate agent tool dashboard built for an Ohio real estate ag
 
    Open [http://localhost:3000](http://localhost:3000).
 
-## Google API Key — where to enter it
+## Google Places Autocomplete — Property Comparator setup
 
-Agents can bring their own Google Maps Platform key (Places API enabled) so address-autocomplete features work without us provisioning a key for every user.
+The Property Comparator's address fields use **Google Places Autocomplete** to suggest full, parseable addresses as the agent types (street + city + state + ZIP). Confirmed picks are passed straight to the Zillow lookup, which dramatically improves match rates over freeform typing.
 
-**To enter it:**
+### How the key is resolved
 
-1. Go to **Profile** (top-right avatar → Profile, or `/profile`).
-2. Scroll to the **Google API Key** field.
-3. Paste your key and click **Save profile**.
+The browser never sees a Google key embedded in the bundle. Instead, the comparator calls **`GET /api/google-api-key`** at runtime, which resolves the key in this order:
 
-The key is stored in your browser's localStorage (alongside the rest of your branding) and is never sent to AgentDesk servers. It's used client-side to authorize Google Places autocomplete requests. If you leave it blank, AgentDesk falls back to `NEXT_PUBLIC_GOOGLE_API_KEY` (if the deployment has one configured); if neither is set, autocomplete is silently disabled and address fields stay as plain text inputs.
+1. **Per-agent key** — if the signed-in agent saved a `googleApiKey` on their **Profile** page (`/profile`), that key wins. It's stored in browser localStorage as part of `AgentBranding` and sent to the route in a request body / cookie session, never persisted server-side.
+2. **Project fallback** — otherwise the route returns `process.env.GOOGLE_API_KEY`.
+3. **None** — if neither is configured, the comparator shows an inline warning ("No Google API key configured — add one on your Profile page") and address fields gracefully degrade to plain text inputs. MLS-ID mode is unaffected.
 
-**How to get a key:**
+The route is auth-gated via the Supabase session — unauthenticated callers get a 401.
 
-1. Open the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create or select a project.
-3. Enable the **Places API** (and optionally **Maps JavaScript API**) under **APIs & Services → Library**.
-4. Go to **APIs & Services → Credentials → Create credentials → API key**.
-5. Restrict the key by HTTP referrer to your AgentDesk domain(s) for safety.
+### Enabling the Google API
 
-Server-side Google calls (if/when added) read `process.env.GOOGLE_API_KEY` instead — that's the deployment-wide fallback and should be set on Vercel as a regular (non-public) env var.
+1. Open the [Google Cloud Console — Places API library](https://console.cloud.google.com/apis/library/places-backend.googleapis.com).
+2. Create or select a project and click **Enable** on **Places API** (and ideally **Maps JavaScript API**).
+3. Go to **APIs & Services → Credentials → Create credentials → API key**.
+4. Restrict the key:
+   - **Application restrictions** → HTTP referrers → add your AgentDesk domain(s) (e.g. `https://agentdesk.app/*`, `http://localhost:3000/*`).
+   - **API restrictions** → restrict to *Places API* and *Maps JavaScript API* only.
+5. Paste the key either into the agent's **Profile** page (per-user) **or** into Vercel env vars as `GOOGLE_API_KEY` (project-wide fallback).
+
+### Autocomplete vs MLS ID toggle
+
+Each address row in the comparator has a small **Use MLS** toggle on the right:
+
+- **Address mode (default)** — Google Places Autocomplete is active. Start typing; pick a suggestion to confirm the address. Confirmed addresses are flagged internally and sent to Zillow's `byaddress` endpoint.
+- **MLS ID mode** — Autocomplete is detached for that row. The input becomes a plain alphanumeric text field that's sent to Zillow's `bymlsid` endpoint, bypassing address parsing entirely. Useful for new construction or off-market listings that Google doesn't have a clean record for.
+
+If the agent types a freeform address without picking from the dropdown, the comparator shows a non-blocking soft warning ("X addresses were typed manually without picking from the Google dropdown") and still submits — Zillow can handle many freeform strings, the hit rate is just lower.
+
+### Troubleshooting Google Places
+
+- **Banner says "No Google API key configured."** — Add a key on `/profile` *or* set `GOOGLE_API_KEY` in your environment and redeploy.
+- **Banner says "Address autocomplete unavailable."** — The script loaded but `Autocomplete` failed. Most common causes:
+  - **Referrer mismatch** — your key is restricted to a domain that doesn't match the one you're loading from. Add `localhost:3000/*` for dev and your prod domain.
+  - **Places API not enabled** — the key works for Maps but not Places. Enable Places API in Cloud Console.
+  - **Quota exhausted** — check the *APIs & Services → Quotas* page in Cloud Console.
+- **Dropdown opens but no suggestions appear** — usually a quota or referrer issue; check the browser console for Google's error string (e.g. `RefererNotAllowedMapError`, `ApiNotActivatedMapError`).
+- **Want to disable autocomplete entirely** — leave the key blank everywhere; the comparator will keep working with plain text inputs.
+
+Server-side Google calls (if/when added) should read `process.env.GOOGLE_API_KEY` directly — that's the deployment-wide fallback and should be set on Vercel as a regular (non-public) env var.
 
 ## Pages
 
 - **Dashboard** — Pipeline count, monthly comparisons, live FL 30yr rate, median DOM, recent comparisons table, quick-add-to-pipeline form.
-- **Property Comparator** — Compare up to 5 properties side-by-side via the RapidAPI Zillow proxy.
+- **Property Comparator** — Compare up to 5 properties side-by-side. Address inputs use Google Places Autocomplete with a per-row MLS-ID fallback.
 - **My Pipeline** — Kanban board: Lead → Showing → Under Contract → Closed, with drag-and-drop.
 - **Market Stats** — Live FRED 30yr + 15yr rates with sparklines, local market inputs, mortgage calculator, affordability check.
 - **Client Report** — Turn a saved comparison into a branded, printable client report.
@@ -81,8 +104,8 @@ The comparator proxies through `/api/property-lookup`, which hits the RapidAPI Z
 
 RapidAPI returned a 404 or an empty record — the **address itself** is the problem, not the connection. Fixes, in order:
 
-1. **Use the full USPS form.** `123 Main St, Tampa, FL 33601` works far more reliably than `123 Main St Tampa`. Always include city, state, and ZIP.
-2. **Verify on zillow.com first.** Paste the same address into Zillow's search bar. If Zillow can't find it, RapidAPI can't either — the property may not be indexed (new construction, off-market, commercial, rural parcel without a street address).
+1. **Use the Google Places dropdown.** Confirmed picks from the dropdown produce the cleanest USPS-style strings, which match Zillow's records far better than freeform typing.
+2. **Verify on zillow.com first.** Paste the same address into Zillow's search bar. If Zillow can't find it, RapidAPI can't either — the property may not be indexed (new construction, off-market, commercial, rural parcel without a street address). For these, switch the row to **MLS ID** mode.
 3. **Avoid unit/apt suffixes on first try.** `123 Main St #4B` sometimes fails when `123 Main St` succeeds. Look up the building, then drill in.
 4. **Check for typos in city/state.** `Tamap FL` silently returns no data instead of a helpful error.
 
@@ -107,7 +130,7 @@ This is a network, auth, or quota problem on the RapidAPI side — the address m
 
 ### Vercel cold-start timeouts
 
-The RapidAPI Zillow host is sometimes slow on the first request after idle. On Vercel's free tier, a cold function start adds 1–3 seconds, and the upstream itself can take another 10–20 seconds when warming up. The comparator uses a 12s timeout per request with automatic retries, but you may still see a single red "Data unavailable" card on the very first compare of a session.
+The RapidAPI Zillow host is sometimes slow on the first request after idle. On Vercel's free tier, a cold function start adds 1–3 seconds, and the upstream itself can take another 10–20 seconds when warming up. The comparator uses a 30s timeout per request with automatic retries, but you may still see a single red "Data unavailable" card on the very first compare of a session.
 
 **Fix:** click the **Retry failed** button (appears whenever ≥1 card is in a connection-error state). The second attempt typically succeeds because the function is warm and the upstream has stabilized.
 
@@ -129,4 +152,4 @@ This project uses an isolated Postgres schema on a shared Supabase instance. Eve
 
 ## Deploy
 
-Deploy to Vercel. Add the same env vars in your Vercel project settings — including the server-only `FRED_API_KEY` and `RAPIDAPI_KEY`, and optionally `GOOGLE_API_KEY` / `NEXT_PUBLIC_GOOGLE_API_KEY` as deployment-wide fallbacks for agents who don't bring their own Google key. After adding or changing env vars, trigger a fresh deployment so the new values are picked up.
+Deploy to Vercel. Add the same env vars in your Vercel project settings — including the server-only `FRED_API_KEY`, `RAPIDAPI_KEY`, and (optionally) `GOOGLE_API_KEY` as a project-wide Google Places fallback. After adding or changing env vars, trigger a fresh deployment so the new values are picked up.
