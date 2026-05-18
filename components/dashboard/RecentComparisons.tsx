@@ -56,25 +56,25 @@ function RecentComparisons() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-      className="overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+      className="w-full max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
     >
-      <header className="flex items-center justify-between gap-4 border-b border-border bg-gradient-to-r from-card to-muted/30 px-6 py-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-gradient-to-r from-card to-muted/30 px-6 py-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
             <GitCompareArrows className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </span>
-          <div>
-            <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
+          <div className="min-w-0">
+            <h2 className="font-display text-lg font-semibold tracking-tight text-foreground truncate">
               Recent Comparisons
             </h2>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground truncate">
               Last 3 · property analysis
             </p>
           </div>
         </div>
         <Link
           href="/property-comparator"
-          className="group inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:bg-primary/10 hover:border-primary/30"
+          className="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:bg-primary/10 hover:border-primary/30"
         >
           New comparison
           <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
@@ -103,8 +103,8 @@ function RecentComparisons() {
           </Link>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="w-full max-w-full overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-border text-left font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 <th className="px-6 py-3">Date</th>
@@ -140,7 +140,7 @@ function RecentComparisons() {
                           <span className="text-muted-foreground">—</span>
                         ) : (
                           addresses.map((a, i) => (
-                            <span key={i} className="truncate max-w-[20rem]">
+                            <span key={i} className="truncate max-w-[18rem]">
                               {a}
                             </span>
                           ))
@@ -149,7 +149,7 @@ function RecentComparisons() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-display font-semibold text-foreground truncate max-w-[18rem]">
+                        <span className="font-display font-semibold text-foreground truncate max-w-[16rem]">
                           {winner.address}
                         </span>
                         {winner.price && (
@@ -190,5 +190,4 @@ function RecentComparisons() {
   );
 }
 
-export { RecentComparisons };
 export default RecentComparisons;
