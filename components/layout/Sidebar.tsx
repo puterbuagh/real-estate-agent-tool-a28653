@@ -66,10 +66,13 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-full w-64 max-w-[80vw] flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-200 ease-out",
+          "z-50 flex h-screen w-64 max-w-[80vw] flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border",
           "grain-overlay",
-          "lg:translate-x-0 lg:max-w-none",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          "sticky top-0",
+          "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:transition-transform max-lg:duration-200 max-lg:ease-out",
+          mobileOpen
+            ? "max-lg:translate-x-0"
+            : "max-lg:-translate-x-full"
         )}
       >
         <div className="relative z-10 flex items-center justify-between px-6 h-16 border-b border-sidebar-border shrink-0">
