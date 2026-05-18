@@ -6,12 +6,12 @@ interface ComparisonTableProps {
 }
 
 function formatNum(n: number | null | undefined, suffix = ""): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n === null || n === undefined || Number.isNaN(n)) return "\u2014";
   return `${new Intl.NumberFormat("en-US").format(n)}${suffix}`;
 }
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "\u2014";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString("en-US", {
@@ -41,6 +41,8 @@ function ComparisonTable({ properties }: ComparisonTableProps) {
     label: string;
     render: (p: ZillowProperty) => React.ReactNode;
     highlight?: (p: ZillowProperty) => boolean;
+    displayFont?: boolean;
+    numeric?: boolean;
   }> = [
     {
       key: "address",
@@ -49,48 +51,61 @@ function ComparisonTable({ properties }: ComparisonTableProps) {
         <span className="font-medium text-foreground">{p.address}</span>
       ),
     },
-    { key: "price", label: "Price", render: (p) => formatCurrency(p.price) },
+    {
+      key: "price",
+      label: "Price",
+      render: (p) => formatCurrency(p.price),
+      displayFont: true,
+      numeric: true,
+    },
     {
       key: "zestimate",
       label: "Zestimate",
       render: (p) => formatCurrency(p.zestimate),
       highlight: (p) =>
         Number.isFinite(highestZest) && p.zestimate === highestZest,
+      displayFont: true,
+      numeric: true,
     },
-    { key: "beds", label: "Beds", render: (p) => formatNum(p.bedrooms) },
-    { key: "baths", label: "Baths", render: (p) => formatNum(p.bathrooms) },
+    { key: "beds", label: "Beds", render: (p) => formatNum(p.bedrooms), numeric: true },
+    { key: "baths", label: "Baths", render: (p) => formatNum(p.bathrooms), numeric: true },
     {
       key: "sqft",
       label: "Sqft",
       render: (p) => formatNum(p.livingArea),
+      numeric: true,
     },
     {
       key: "ppsf",
       label: "$/Sqft",
       render: (p) =>
-        p.pricePerSqft ? `$${formatNum(p.pricePerSqft)}` : "—",
+        p.pricePerSqft ? `$${formatNum(p.pricePerSqft)}` : "\u2014",
       highlight: (p) =>
         Number.isFinite(lowestPpsf) && p.pricePerSqft === lowestPpsf,
+      displayFont: true,
+      numeric: true,
     },
     {
       key: "lot",
       label: "Lot",
       render: (p) =>
         p.lotSize === null || p.lotSize === undefined
-          ? "—"
+          ? "\u2014"
           : typeof p.lotSize === "number"
           ? formatNum(p.lotSize, " sqft")
           : String(p.lotSize),
+      numeric: true,
     },
     {
       key: "year",
       label: "Year",
       render: (p) => formatNum(p.yearBuilt),
+      numeric: true,
     },
     {
       key: "type",
       label: "Type",
-      render: (p) => p.propertyType ?? "—",
+      render: (p) => p.propertyType ?? "\u2014",
     },
     {
       key: "dom",
@@ -107,38 +122,52 @@ function ComparisonTable({ properties }: ComparisonTableProps) {
           {formatNum(p.daysOnMarket)}
         </span>
       ),
+      numeric: true,
     },
     {
       key: "lastSold",
       label: "Last Sold",
       render: (p) =>
         p.lastSoldPrice
-          ? `${formatCurrency(p.lastSoldPrice)} · ${formatDate(p.lastSoldDate)}`
-          : "—",
+          ? `${formatCurrency(p.lastSoldPrice)} \u00b7 ${formatDate(p.lastSoldDate)}`
+          : "\u2014",
+      displayFont: true,
     },
     {
       key: "tax",
       label: "Tax Assessed",
       render: (p) => formatCurrency(p.taxAssessedValue),
+      displayFont: true,
+      numeric: true,
     },
   ];
 
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
       <header className="border-b border-border px-6 py-4">
-        <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-medium">
+          Scan view
+        </p>
+        <h2 className="font-display text-xl font-semibold tracking-tight text-foreground mt-1">
           Side-by-side metrics
         </h2>
-        <p className="text-xs text-muted-foreground">
-          Every property, every metric — for fast scanning.
+        <p className="text-xs text-muted-foreground mt-1">
+          Every property, every metric \u2014 for fast scanning.
         </p>
       </header>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <tr className="border-b border-border bg-gradient-to-b from-muted/60 to-muted/20">
               {columns.map((c) => (
-                <th key={c.key} className="px-4 py-3 whitespace-nowrap">
+                <th
+                  key={c.key}
+                  className={cn(
+                    "px-4 py-3 whitespace-nowrap",
+                    "font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground",
+                    c.numeric ? "text-right" : "text-left"
+                  )}
+                >
                   {c.label}
                 </th>
               ))}
@@ -149,8 +178,8 @@ function ComparisonTable({ properties }: ComparisonTableProps) {
               <tr
                 key={p.zpid ?? `${p.address}-${idx}`}
                 className={cn(
-                  "border-b border-border last:border-b-0",
-                  idx % 2 === 1 && "bg-muted/40"
+                  "border-b border-border last:border-b-0 transition-colors hover:bg-primary/[0.02]",
+                  idx % 2 === 1 && "bg-gradient-to-r from-muted/30 via-muted/40 to-muted/30"
                 )}
               >
                 {columns.map((c) => (
@@ -158,6 +187,8 @@ function ComparisonTable({ properties }: ComparisonTableProps) {
                     key={c.key}
                     className={cn(
                       "px-4 py-3 align-top whitespace-nowrap text-foreground",
+                      c.numeric && "text-right tabular-nums",
+                      c.displayFont && "font-display",
                       c.highlight?.(p) &&
                         "bg-primary/5 font-semibold text-primary"
                     )}
