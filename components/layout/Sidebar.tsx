@@ -2,8 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, GitCompare, Briefcase, BarChart3, FileText, Mail, X, Building2 } from "lucide-react";
+import {
+  LayoutDashboard,
+  GitCompare,
+  Briefcase,
+  BarChart3,
+  FileText,
+  Mail,
+  X,
+  Building2,
+  UserCog,
+  UserCircle2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAgentBranding } from "@/context/AgentBrandingContext";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -19,8 +31,28 @@ const navItems = [
   { href: "/email-report", label: "Email Client Report", icon: Mail },
 ];
 
+const settingsItems = [
+  { href: "/profile", label: "Profile & Branding", icon: UserCircle2 },
+];
+
 function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { branding, initials, isConfigured } = useAgentBranding();
+
+  const isProfileActive = pathname.startsWith("/profile");
+
+  const displayName =
+    (branding.name ?? "").trim() || "Set up your profile";
+  const displaySub = (() => {
+    if (!isConfigured) return "Click to add your details";
+    if (branding.brokerage && branding.brokerage.trim()) {
+      return branding.brokerage;
+    }
+    if (branding.email && branding.email.trim()) {
+      return branding.email;
+    }
+    return "Realtor®";
+  })();
 
   return (
     <>
@@ -42,7 +74,10 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         <div className="flex items-center justify-between px-6 h-16 border-b border-sidebar-border">
           <Link href="/" className="flex items-center gap-2.5" onClick={onClose}>
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-              <Building2 className="h-4.5 w-4.5 text-primary-foreground" strokeWidth={2.5} />
+              <Building2
+                className="h-4.5 w-4.5 text-primary-foreground"
+                strokeWidth={2.5}
+              />
             </div>
             <span className="font-display text-lg font-semibold tracking-tight">
               AgentDesk
@@ -88,18 +123,90 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               );
             })}
           </ul>
+
+          <div className="mt-6 px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/40">
+            Settings
+          </div>
+          <ul className="space-y-0.5">
+            {settingsItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname.startsWith(item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={onClose}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-primary/15 text-sidebar-foreground border-l-2 border-primary -ml-[2px] pl-[10px]"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-foreground/5 hover:text-sidebar-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    <span className="truncate">{item.label}</span>
+                    {!isConfigured && item.href === "/profile" && (
+                      <span
+                        className="ml-auto inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+                        aria-label="Profile incomplete"
+                      />
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </nav>
 
-        <div className="border-t border-sidebar-border p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/20 text-sm font-semibold text-sidebar-foreground">
-              JM
+        <div className="border-t border-sidebar-border p-3">
+          <Link
+            href="/profile"
+            onClick={onClose}
+            aria-label="Edit agent profile"
+            title={
+              isConfigured
+                ? `Signed in as ${branding.name}`
+                : "Set up your profile"
+            }
+            className={cn(
+              "group flex items-center gap-3 rounded-md p-2 transition-colors",
+              "hover:bg-sidebar-foreground/5",
+              isProfileActive && "bg-sidebar-foreground/5"
+            )}
+          >
+            <div
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-semibold",
+                isConfigured
+                  ? "bg-primary/20 text-sidebar-foreground"
+                  : "bg-sidebar-foreground/10 text-sidebar-foreground/70"
+              )}
+              aria-hidden="true"
+            >
+              {branding.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={branding.logoUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span>{initials}</span>
+              )}
             </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-sidebar-foreground">Jordan Miller</div>
-              <div className="truncate text-xs text-sidebar-foreground/50">Ohio Realtor®</div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-sidebar-foreground">
+                {displayName}
+              </div>
+              <div className="truncate text-xs text-sidebar-foreground/50">
+                {displaySub}
+              </div>
             </div>
-          </div>
+            <UserCog
+              className="h-4 w-4 shrink-0 text-sidebar-foreground/40 transition-colors group-hover:text-sidebar-foreground/80"
+              aria-hidden="true"
+            />
+          </Link>
         </div>
       </aside>
     </>
