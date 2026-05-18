@@ -65,14 +65,15 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       )}
 
       <aside
+        style={{ zIndex: 50 }}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-200 ease-out",
+          "fixed inset-y-0 left-0 flex h-full w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-200 ease-out",
           "grain-overlay",
           "lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="relative z-10 flex items-center justify-between px-6 h-16 border-b border-sidebar-border">
+        <div className="relative z-10 flex items-center justify-between px-6 h-16 border-b border-sidebar-border shrink-0">
           <Link href="/" className="flex items-center gap-2.5" onClick={onClose}>
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.4),0_4px_12px_hsl(var(--primary)/0.3)]">
               <Building2
@@ -164,7 +165,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           </ul>
         </nav>
 
-        <div className="relative z-10 border-t border-sidebar-border p-3">
+        <div className="relative z-10 border-t border-sidebar-border p-3 shrink-0">
           <Link
             href="/profile"
             onClick={onClose}
