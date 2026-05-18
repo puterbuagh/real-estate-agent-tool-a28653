@@ -32,6 +32,18 @@ const EXAMPLE_ADDRESSES = [
 
 const EXAMPLE_MLS_IDS = ["A4612345", "O6098765", "T3445566", "S5223344", "N6112233"];
 
+const DEBUG =
+  typeof window !== "undefined" &&
+  (window.localStorage?.getItem("agentdesk:debug:gmaps") === "1" ||
+    process.env.NODE_ENV !== "production");
+
+function debug(...args: unknown[]) {
+  if (DEBUG) {
+    // eslint-disable-next-line no-console
+    console.log("[AddressInputs]", ...args);
+  }
+}
+
 /** Lightweight client-side validation — surfaces format problems before burning a quota call. */
 function validateAddress(value: string): string | null {
   const s = value.trim();
@@ -93,18 +105,22 @@ function AddressInputs({
 
   React.useEffect(() => {
     let cancelled = false;
+    debug("mounting — kicking off loadGoogleMaps()");
     setGmaps({ status: "loading" });
     loadGoogleMaps()
       .then((result) => {
         if (cancelled) return;
+        debug("loadGoogleMaps() resolved with status:", result.status);
+        if (result.status === "error" || result.status === "missing_key") {
+          debug("loader error:", result.error);
+        }
         setGmaps(result);
       })
       .catch((err) => {
         if (cancelled) return;
-        setGmaps({
-          status: "error",
-          error: err instanceof Error ? err.message : "Failed to load Google Maps",
-        });
+        const msg = err instanceof Error ? err.message : "Failed to load Google Maps";
+        debug("loadGoogleMaps() threw:", msg);
+        setGmaps({ status: "error", error: msg });
       });
     return () => {
       cancelled = true;
@@ -172,14 +188,19 @@ function AddressInputs({
 
   // ---------------------------------------------------------------------
   // Attach / detach Google Places Autocomplete to each address-mode input.
-  // Re-runs whenever Maps becomes ready, the row count changes, or a row
-  // toggles between address ⇄ MLS mode.
   // ---------------------------------------------------------------------
   React.useEffect(() => {
-    if (gmaps.status !== "ready") return;
+    if (gmaps.status !== "ready") {
+      debug("attach effect skipped — gmaps status:", gmaps.status);
+      return;
+    }
     const google = gmaps.google;
-    if (!google?.maps?.places?.Autocomplete) return;
+    if (!google?.maps?.places?.Autocomplete) {
+      debug("attach effect skipped — Autocomplete constructor missing");
+      return;
+    }
 
+    debug("attaching autocomplete to", addresses.length, "rows");
     const cleanups: Array<() => void> = [];
 
     addresses.forEach((_, idx) => {
@@ -196,12 +217,16 @@ function AddressInputs({
             /* ignore */
           }
           autocompleteRefs.current[idx] = null;
+          debug(`row ${idx}: detached autocomplete (mode=${mode}, hasInput=${Boolean(input)})`);
         }
         return;
       }
 
       // Already attached — leave it alone.
-      if (autocompleteRefs.current[idx]) return;
+      if (autocompleteRefs.current[idx]) {
+        debug(`row ${idx}: already attached, skipping`);
+        return;
+      }
 
       try {
         const ac = new google.maps.places.Autocomplete(input, {
@@ -209,9 +234,14 @@ function AddressInputs({
           componentRestrictions: { country: ["us"] },
           fields: ["place_id", "formatted_address", "address_components", "geometry"],
         });
+        debug(`row ${idx}: Autocomplete constructed`);
 
         const listener = ac.addListener("place_changed", () => {
           const place = ac.getPlace();
+          debug(`row ${idx}: place_changed`, {
+            place_id: place?.place_id,
+            formatted_address: place?.formatted_address,
+          });
           const formatted = place?.formatted_address?.trim();
           if (formatted) {
             onChange(idx, formatted);
@@ -221,6 +251,8 @@ function AddressInputs({
               return next;
             });
             if (onPlaceSelected) onPlaceSelected(idx, formatted);
+          } else {
+            debug(`row ${idx}: place_changed fired but no formatted_address`);
           }
         });
 
@@ -237,8 +269,8 @@ function AddressInputs({
             /* ignore */
           }
         });
-      } catch {
-        // Autocomplete construction failed for this row — fall back to plain text.
+      } catch (err) {
+        debug(`row ${idx}: Autocomplete construction failed`, err);
       }
     });
 
@@ -270,7 +302,7 @@ function AddressInputs({
 
   // Decide what the tip banner says based on Maps loader state.
   const tipBanner = (() => {
-    if (gmaps.status === "loading") {
+    if (gmaps.status === "loading" || gmaps.status === "idle") {
       return (
         <div className="rounded-md border border-border bg-muted/30 p-3 flex items-start gap-2">
           <Loader2
@@ -309,6 +341,11 @@ function AddressInputs({
               </>
             ) : (
               <>
+                {gmaps.error ? (
+                  <span className="block mt-0.5 text-muted-foreground/80">
+                    {gmaps.error}
+                  </span>
+                ) : null}
                 You can still type addresses manually — use{" "}
                 <span className="font-mono text-foreground">
                   123 Main St, Tampa, FL 33601
@@ -381,7 +418,7 @@ function AddressInputs({
                       : `Property ${idx + 1} — ${example}`
                   }
                   disabled={disabled}
-                  autoComplete={mode === "mlsid" ? "off" : "off"}
+                  autoComplete="off"
                   aria-label={
                     mode === "mlsid"
                       ? `Property ${idx + 1} MLS ID`
@@ -395,7 +432,7 @@ function AddressInputs({
                       "border-[hsl(38_92%_50%/0.6)] focus-visible:ring-[hsl(38_92%_50%/0.6)]"
                   )}
                 />
-                {mode === "address" && gmaps.status === "loading" && (
+                {mode === "address" && (gmaps.status === "loading" || gmaps.status === "idle") && (
                   <Loader2
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground animate-spin"
                     aria-hidden="true"
