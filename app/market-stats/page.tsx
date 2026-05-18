@@ -22,16 +22,21 @@ function SectionHeader({
       <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground font-medium">
         {eyebrow}
       </p>
-      <h2 className="font-display text-2xl font-semibold tracking-tight">
-        {title}
+      <h2 className="font-display text-2xl md:text-3xl font-semibold tracking-tight relative inline-block">
+        <span className="relative">
+          {title}
+          <span
+            aria-hidden="true"
+            className="absolute -bottom-1 left-0 h-[3px] w-12 bg-gradient-to-r from-primary to-primary/30 rounded-full"
+          />
+        </span>
       </h2>
-      <p className="text-sm text-muted-foreground max-w-2xl">{description}</p>
+      <p className="text-sm text-muted-foreground max-w-2xl mt-2">{description}</p>
     </div>
   );
 }
 
 async function getLiveRate(): Promise<number | null> {
-  // Reads FRED_API_KEY (server-only) via fetchMortgageRates → lib/fred.
   try {
     const data = await fetchMortgageRates();
     const rate = data?.thirtyYear?.current;
@@ -50,7 +55,17 @@ async function MarketStatsPage() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="relative space-y-12">
+      {/* Atmospheric gradient mesh — only visible on this page */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+      >
+        <div className="absolute -top-32 -left-24 h-[520px] w-[520px] rounded-full bg-primary/10 blur-3xl" />
+        <div className="absolute top-1/3 -right-24 h-[420px] w-[420px] rounded-full bg-[hsl(38_92%_60%)]/10 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-[360px] w-[360px] rounded-full bg-[hsl(152_55%_50%)]/10 blur-3xl" />
+      </div>
+
       <header className="flex flex-col gap-2 border-b border-border pb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
           <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -65,7 +80,7 @@ async function MarketStatsPage() {
         </p>
       </header>
 
-      <section className="space-y-4" aria-label="Live mortgage rates">
+      <section className="space-y-5" aria-label="Live mortgage rates">
         <SectionHeader
           eyebrow="Section 1"
           title="Live Mortgage Rates"
@@ -74,7 +89,7 @@ async function MarketStatsPage() {
         <LiveRatesSection />
       </section>
 
-      <section className="space-y-4" aria-label="Local market data">
+      <section className="space-y-5" aria-label="Local market data">
         <SectionHeader
           eyebrow="Section 2"
           title="Local Market Data"
@@ -83,7 +98,7 @@ async function MarketStatsPage() {
         <LocalMarketInputs />
       </section>
 
-      <section className="space-y-4" aria-label="Mortgage calculator">
+      <section className="space-y-5" aria-label="Mortgage calculator">
         <SectionHeader
           eyebrow="Section 3"
           title="Mortgage Calculator"
@@ -92,7 +107,7 @@ async function MarketStatsPage() {
         <MortgageCalculator prefillRate={liveRate} />
       </section>
 
-      <section className="space-y-4" aria-label="Affordability check">
+      <section className="space-y-5" aria-label="Affordability check">
         <SectionHeader
           eyebrow="Section 4"
           title="Affordability Quick Check"
