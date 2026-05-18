@@ -17,7 +17,18 @@ export interface AddressInputsProps {
   max?: number;
   modes?: AddressInputMode[];
   onModeChange?: (index: number, mode: AddressInputMode) => void;
-  onPlaceSelected?: (index: number, formattedAddress: string) => void;
+  /**
+   * Called when a Google Places suggestion is confirmed. Receives the verified
+   * formatted address plus latitude/longitude. Parent handlers that only care
+   * about the address may ignore the coordinate args — they're optional from
+   * the consumer's POV but always provided by this component.
+   */
+  onPlaceSelected?: (
+    index: number,
+    formattedAddress: string,
+    latitude: number,
+    longitude: number
+  ) => void;
 }
 
 const EXAMPLE_ADDRESSES = [
@@ -193,10 +204,14 @@ function AddressInputs({
 
       if (autocompleteRefs.current[idx]) return;
 
-      const handleSelected = (formatted: string) => {
+      const handleSelected = (
+        formatted: string,
+        lat: number,
+        lng: number
+      ) => {
         const trimmed = formatted.trim();
         if (!trimmed) return;
-        debug(`row ${idx}: place selected →`, trimmed);
+        debug(`row ${idx}: place selected →`, trimmed, lat, lng);
         setConfirmedFromPlace((prev) => {
           const next = [...prev];
           next[idx] = true;
@@ -205,8 +220,16 @@ function AddressInputs({
         if (input) {
           input.value = trimmed;
         }
+        // Prefer the place-aware callback. If the parent didn't wire it up,
+        // fall back to onChange so the address still propagates — but we lose
+        // coordinates in that case (parent should adopt onPlaceSelected).
         if (onPlaceSelectedRef.current) {
-          onPlaceSelectedRef.current(idx, trimmed);
+          try {
+            onPlaceSelectedRef.current(idx, trimmed, lat, lng);
+          } catch (err) {
+            debug(`row ${idx}: onPlaceSelected threw`, err);
+            onChangeRef.current(idx, trimmed);
+          }
         } else {
           onChangeRef.current(idx, trimmed);
         }
@@ -227,7 +250,22 @@ function AddressInputs({
         const listener = ac.addListener("place_changed", () => {
           const place = ac.getPlace();
           const formatted = place?.formatted_address?.trim();
-          if (formatted) handleSelected(formatted);
+          const lat = place?.geometry?.location?.lat();
+          const lng = place?.geometry?.location?.lng();
+          if (
+            formatted &&
+            typeof lat === "number" &&
+            typeof lng === "number" &&
+            Number.isFinite(lat) &&
+            Number.isFinite(lng)
+          ) {
+            handleSelected(formatted, lat, lng);
+          } else {
+            debug(
+              `row ${idx}: place_changed without usable formatted_address/geometry`,
+              { formatted, lat, lng }
+            );
+          }
         });
 
         autocompleteRefs.current[idx] = {
