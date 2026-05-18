@@ -75,7 +75,6 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Prevent horizontal overflow from wide tables/cards breaking the shell */
   html, body {
     overflow-x: hidden;
   }
@@ -100,7 +99,6 @@
     background-size: 32px 32px;
   }
 
-  /* Subtle grain texture overlay — adds tactile depth to dark surfaces */
   .grain-overlay {
     position: relative;
   }
@@ -123,7 +121,6 @@
   .no-print {}
 }
 
-/* Screen-only report preview framing */
 .report-page {
   background: white;
   color: hsl(222 35% 12%);
@@ -135,7 +132,6 @@
   border: 1px solid hsl(var(--border));
 }
 
-/* Print styles — used by Client Report view */
 @media print {
   @page {
     margin: 0.5in;
@@ -165,18 +161,10 @@
     display: none !important;
   }
 
-  main {
+  main,
+  main[data-app-main="true"] {
     padding: 0 !important;
     margin: 0 !important;
-    max-width: 100% !important;
-    margin-left: 0 !important;
-    padding-left: 0 !important;
-  }
-
-  /* Reset any sidebar-offset utilities for print without relying on JIT class names */
-  [data-app-main="true"] {
-    margin-left: 0 !important;
-    padding-left: 0 !important;
     max-width: 100% !important;
   }
 
