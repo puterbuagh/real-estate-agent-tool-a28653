@@ -25,19 +25,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
       {/*
         Layout strategy:
-        - Sidebar is `fixed left-0 w-64` and only visible (translated in) at lg+.
-        - On mobile/tablet, the sidebar is offscreen, so main content uses the full viewport width.
-        - At lg+, we offset the main column by exactly 16rem (w-64) using `lg:ml-64`.
-        - We do NOT use `mx-auto` on <main> because that would re-center within the viewport and
-          visually ignore the sidebar offset. Instead we cap width and align with `max-w-[1600px]`.
+        - Sidebar is `fixed left-0 w-64` (16rem / 256px) and only translated in at lg+.
+        - We apply `lg:pl-64` directly to <main> so the offset matches the sidebar
+          width exactly — no gap, no overlap. Horizontal page padding is handled
+          by the inner max-width container via px utilities.
       */}
-      <div className="flex min-h-screen flex-col lg:ml-64">
+      <div className="flex min-h-screen flex-col">
         <TopBar title={title} onMenuClick={() => setMobileOpen(true)} />
         <main
           data-app-main="true"
-          className="flex-1 w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
+          className="flex-1 w-full px-4 py-6 sm:px-6 lg:pl-64 lg:pr-0 lg:py-8"
         >
-          {children}
+          <div className="mx-auto w-full max-w-[1600px] lg:px-8">{children}</div>
         </main>
       </div>
     </div>
