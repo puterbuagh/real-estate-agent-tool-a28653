@@ -1,6 +1,8 @@
 "use client";
 
-import { Menu } from "lucide-react";
+import Link from "next/link";
+import { Menu, UserCircle2 } from "lucide-react";
+import { useAgentBranding } from "@/context/AgentBrandingContext";
 
 interface TopBarProps {
   title?: string;
@@ -8,6 +10,8 @@ interface TopBarProps {
 }
 
 function TopBar({ title = "Dashboard", onMenuClick }: TopBarProps) {
+  const { branding, initials, hasProfile } = useAgentBranding();
+
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -30,9 +34,7 @@ function TopBar({ title = "Dashboard", onMenuClick }: TopBarProps) {
         <h1 className="font-display text-xl font-semibold tracking-tight text-foreground truncate">
           {title}
         </h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
-          ·
-        </span>
+        <span className="hidden text-xs text-muted-foreground sm:inline">·</span>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           {today}
         </span>
@@ -43,6 +45,26 @@ function TopBar({ title = "Dashboard", onMenuClick }: TopBarProps) {
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           <span className="text-xs font-medium text-muted-foreground">Live</span>
         </div>
+
+        <Link
+          href="/profile"
+          aria-label="Edit your agent profile"
+          title={hasProfile ? `Signed in as ${branding.name}` : "Set up your profile"}
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-2 py-1 pr-3 text-sm text-foreground transition-colors hover:bg-accent"
+        >
+          {hasProfile ? (
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
+              {initials}
+            </span>
+          ) : (
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <UserCircle2 className="h-4 w-4" aria-hidden="true" />
+            </span>
+          )}
+          <span className="hidden max-w-[10rem] truncate text-xs font-medium sm:inline">
+            {hasProfile ? branding.name : "Set up profile"}
+          </span>
+        </Link>
       </div>
     </header>
   );
