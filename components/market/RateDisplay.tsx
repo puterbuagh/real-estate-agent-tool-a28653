@@ -32,6 +32,13 @@ function RateDisplay({ label, seriesLabel, series, className }: RateDisplayProps
       ? "text-[hsl(var(--success))]"
       : "text-muted-foreground";
 
+  const deltaGlow =
+    direction === "up"
+      ? "shadow-[0_0_12px_-2px_hsl(var(--destructive)/0.35)]"
+      : direction === "down"
+      ? "shadow-[0_0_12px_-2px_hsl(var(--success)/0.35)]"
+      : "";
+
   const asOfDate = new Date(series.currentDate).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -39,18 +46,23 @@ function RateDisplay({ label, seriesLabel, series, className }: RateDisplayProps
   });
 
   return (
-    <Card className={cn("p-6 flex flex-col gap-4", className)}>
+    <Card className={cn("relative overflow-hidden p-6 flex flex-col gap-4", className)}>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent"
+      />
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground font-medium">
+          <p className="font-display text-[11px] uppercase tracking-[0.16em] text-muted-foreground font-semibold">
             {label}
           </p>
           <p className="text-[11px] text-muted-foreground/80 mt-0.5">{seriesLabel}</p>
         </div>
         <div
           className={cn(
-            "inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium tabular-nums",
-            deltaColor
+            "inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium tabular-nums transition-shadow",
+            deltaColor,
+            deltaGlow
           )}
           title={`Week-over-week change: ${delta >= 0 ? "+" : ""}${delta.toFixed(2)} pts`}
         >
@@ -73,9 +85,9 @@ function RateDisplay({ label, seriesLabel, series, className }: RateDisplayProps
       </div>
 
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>12-week trend</span>
+        <span className="font-display uppercase tracking-[0.14em] font-semibold">12-week trend</span>
         <span className="tabular-nums">
-          low {formatPercent(Math.min(...history.map((h) => h.value)))} · high{" "}
+          low {formatPercent(Math.min(...history.map((h) => h.value)))} \u00b7 high{" "}
           {formatPercent(Math.max(...history.map((h) => h.value)))}
         </span>
       </div>
