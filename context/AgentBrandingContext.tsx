@@ -20,18 +20,15 @@ const DEFAULT_BRANDING: AgentBranding = {
   email: "",
   logoUrl: null,
   avatarUrl: null,
-  googleApiKey: "",
 };
 
 interface AgentBrandingContextValue {
   branding: AgentBranding;
   initials: string;
-  /** True when the agent has saved at least a name. Used to drive UI nudges. */
+  /** True when the agent has saved at least a name. */
   isConfigured: boolean;
-  /** Alias for isConfigured — kept for components that read `hasProfile`. */
+  /** Alias for isConfigured. */
   hasProfile: boolean;
-  /** Convenience: true when a Google API key has been entered. */
-  hasGoogleKey: boolean;
   updateBranding: (next: Partial<AgentBranding>) => void;
   setBranding: (next: AgentBranding) => void;
   resetBranding: () => void;
@@ -73,8 +70,6 @@ function readFromStorage(): AgentBranding {
         typeof parsed.avatarUrl === "string" && parsed.avatarUrl
           ? parsed.avatarUrl
           : null,
-      googleApiKey:
-        typeof parsed.googleApiKey === "string" ? parsed.googleApiKey : "",
     };
   } catch {
     return DEFAULT_BRANDING;
@@ -85,13 +80,11 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBrandingState] = useState<AgentBranding>(DEFAULT_BRANDING);
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate from localStorage once on mount.
   useEffect(() => {
     setBrandingState(readFromStorage());
     setHydrated(true);
   }, []);
 
-  // Persist on every change after hydration.
   useEffect(() => {
     if (!hydrated) return;
     if (typeof window === "undefined") return;
@@ -102,7 +95,6 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
     }
   }, [branding, hydrated]);
 
-  // Cross-tab sync: pick up changes made in another window.
   useEffect(() => {
     if (typeof window === "undefined") return;
     function onStorage(e: StorageEvent) {
@@ -128,13 +120,11 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AgentBrandingContextValue>(() => {
     const initials = deriveInitials(branding.name);
     const isConfigured = Boolean((branding.name ?? "").trim());
-    const hasGoogleKey = Boolean((branding.googleApiKey ?? "").trim());
     return {
       branding,
       initials,
       isConfigured,
       hasProfile: isConfigured,
-      hasGoogleKey,
       updateBranding,
       setBranding,
       resetBranding,
