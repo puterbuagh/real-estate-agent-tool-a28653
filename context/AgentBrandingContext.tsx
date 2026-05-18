@@ -20,6 +20,7 @@ const DEFAULT_BRANDING: AgentBranding = {
   email: "",
   logoUrl: null,
   avatarUrl: null,
+  googleApiKey: "",
 };
 
 interface AgentBrandingContextValue {
@@ -29,6 +30,8 @@ interface AgentBrandingContextValue {
   isConfigured: boolean;
   /** Alias for isConfigured — kept for components that read `hasProfile`. */
   hasProfile: boolean;
+  /** Convenience: true when a Google API key has been entered. */
+  hasGoogleKey: boolean;
   updateBranding: (next: Partial<AgentBranding>) => void;
   setBranding: (next: AgentBranding) => void;
   resetBranding: () => void;
@@ -70,6 +73,8 @@ function readFromStorage(): AgentBranding {
         typeof parsed.avatarUrl === "string" && parsed.avatarUrl
           ? parsed.avatarUrl
           : null,
+      googleApiKey:
+        typeof parsed.googleApiKey === "string" ? parsed.googleApiKey : "",
     };
   } catch {
     return DEFAULT_BRANDING;
@@ -123,11 +128,13 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AgentBrandingContextValue>(() => {
     const initials = deriveInitials(branding.name);
     const isConfigured = Boolean((branding.name ?? "").trim());
+    const hasGoogleKey = Boolean((branding.googleApiKey ?? "").trim());
     return {
       branding,
       initials,
       isConfigured,
       hasProfile: isConfigured,
+      hasGoogleKey,
       updateBranding,
       setBranding,
       resetBranding,
