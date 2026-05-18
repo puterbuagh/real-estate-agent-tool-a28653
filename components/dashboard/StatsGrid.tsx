@@ -19,13 +19,11 @@ interface RatePoint {
 
 interface MortgageApiResponse {
   ok?: boolean;
-  // New shape
   data?: {
     thirtyYear?: { current?: number | null; currentDate?: string | null; history?: RatePoint[] };
     fifteenYear?: { current?: number | null; currentDate?: string | null; history?: RatePoint[] };
     asOf?: string | null;
   };
-  // Legacy shape (backward compatible)
   value?: string | number | null;
   date?: string | null;
   seriesId?: string;
@@ -52,7 +50,6 @@ function StatsGrid() {
         const data = (await res.json()) as MortgageApiResponse;
         if (cancelled) return;
 
-        // Prefer new shape: data.thirtyYear.current
         const newCurrent = data?.data?.thirtyYear?.current;
         const newAsOf = data?.data?.asOf ?? null;
 
@@ -66,7 +63,6 @@ function StatsGrid() {
           return;
         }
 
-        // Legacy shape fallback
         const legacyVal =
           typeof data.value === "number"
             ? data.value.toFixed(2)
@@ -116,6 +112,7 @@ function StatsGrid() {
         }
         icon={Briefcase}
         accent
+        index={0}
       />
       <StatCard
         label="Comparisons This Month"
@@ -124,6 +121,7 @@ function StatsGrid() {
           month: "long",
         })} to date`}
         icon={GitCompare}
+        index={1}
       />
       <StatCard
         label="Florida 30yr Fixed Rate"
@@ -132,12 +130,14 @@ function StatsGrid() {
         icon={Percent}
         loading={rate.loading}
         error={rate.error}
+        index={2}
       />
       <StatCard
         label="Median Days on Market"
         value="38"
         sublabel="Florida · updated weekly"
         icon={CalendarClock}
+        index={3}
       />
     </div>
   );
