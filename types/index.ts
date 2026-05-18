@@ -30,6 +30,7 @@ export interface ZillowProperty {
   photo: string | null;
   status: "ok" | "no_data" | "error";
   errorMessage?: string;
+  errorType?: "not_found" | "connection_error" | "rate_limited" | "missing_key" | "unknown";
 }
 
 export interface ComparisonProperty {
@@ -82,12 +83,17 @@ export interface Comparison {
   clientName?: string | null;
 }
 
+/**
+ * Global Agent Branding — single source of truth used by Sidebar,
+ * Profile page, Client Report, and printed reports.
+ */
 export interface AgentBranding {
   name: string;
+  brokerage: string;
   phone: string;
   email: string;
-  brokerage?: string;
-  logoUrl?: string;
+  logoUrl?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface FredObservation {
