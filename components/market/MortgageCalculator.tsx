@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Calculator } from "lucide-react";
+import { Calculator, Sparkles } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -40,7 +40,6 @@ function MortgageCalculator({ prefillRate }: MortgageCalculatorProps) {
   const [term, setTerm] = React.useState("30");
   const [rateTouched, setRateTouched] = React.useState(false);
 
-  // If live rate arrives after mount and user hasn't touched, prefill it
   React.useEffect(() => {
     if (!rateTouched && typeof prefillRate === "number" && Number.isFinite(prefillRate)) {
       setRate(prefillRate.toFixed(2));
@@ -163,43 +162,55 @@ function MortgageCalculator({ prefillRate }: MortgageCalculatorProps) {
           </div>
         </div>
 
-        <div className={cn("p-6 bg-muted/40")}>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Monthly Payment
-          </p>
-          <p className="font-display text-4xl font-semibold tracking-tight mt-2 tabular-nums text-foreground">
-            {formatCurrency(monthly)}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Principal &amp; interest only — taxes &amp; insurance not included
-          </p>
+        <div className={cn("relative p-6 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent")}>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-[0.04]"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
+              backgroundSize: "16px 16px",
+            }}
+          />
+          <div className="relative">
+            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              <Sparkles className="h-3 w-3 text-primary" aria-hidden="true" />
+              Monthly Payment
+            </div>
+            <p className="font-display text-5xl font-semibold tracking-tight mt-2 tabular-nums text-foreground">
+              {formatCurrency(monthly)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Principal &amp; interest only — taxes &amp; insurance not included
+            </p>
 
-          <dl className="mt-6 grid grid-cols-2 gap-4">
-            <div>
-              <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Total interest
-              </dt>
-              <dd className="font-display text-xl font-semibold tracking-tight mt-1 tabular-nums">
-                {formatCurrency(totalInterest)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Total cost
-              </dt>
-              <dd className="font-display text-xl font-semibold tracking-tight mt-1 tabular-nums">
-                {formatCurrency(totalCost)}
-              </dd>
-            </div>
-            <div className="col-span-2 pt-3 border-t border-border">
-              <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Loan summary
-              </dt>
-              <dd className="text-xs text-foreground mt-1 tabular-nums">
-                {formatCurrency(principal)} financed at {annualRate.toFixed(2)}% over {years} years
-              </dd>
-            </div>
-          </dl>
+            <dl className="mt-6 grid grid-cols-2 gap-4">
+              <div>
+                <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Total interest
+                </dt>
+                <dd className="font-display text-2xl font-semibold tracking-tight mt-1 tabular-nums">
+                  {formatCurrency(totalInterest)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Total cost
+                </dt>
+                <dd className="font-display text-2xl font-semibold tracking-tight mt-1 tabular-nums">
+                  {formatCurrency(totalCost)}
+                </dd>
+              </div>
+              <div className="col-span-2 pt-3 border-t border-primary/15">
+                <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Loan summary
+                </dt>
+                <dd className="text-xs text-foreground mt-1 tabular-nums">
+                  {formatCurrency(principal)} financed at {annualRate.toFixed(2)}% over {years} years
+                </dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </div>
     </Card>
