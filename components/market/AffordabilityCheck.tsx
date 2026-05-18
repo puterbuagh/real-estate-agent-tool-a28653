@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Wallet, Info } from "lucide-react";
+import { Wallet, Info, Sparkles } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import {
@@ -88,34 +88,52 @@ function AffordabilityCheck({ currentRate }: AffordabilityCheckProps) {
           </div>
         </div>
 
-        <div className="flex flex-col justify-center rounded-lg border border-primary/30 bg-primary/5 p-6">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-            Maximum home price
-          </p>
-          <p
-            className={cn(
-              "font-display font-semibold tracking-tight tabular-nums mt-2",
-              "text-4xl md:text-5xl text-primary"
-            )}
-          >
-            {formatCurrency(maxPrice)}
-          </p>
-          <div className="mt-4 grid grid-cols-2 gap-3 pt-4 border-t border-primary/20">
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Monthly housing budget
-              </p>
-              <p className="font-display text-lg font-semibold tabular-nums mt-1">
-                {formatCurrency(monthlyBudget)}
-              </p>
+        <div
+          className={cn(
+            "relative flex flex-col justify-center overflow-hidden rounded-lg p-6",
+            "bg-gradient-to-br from-primary/15 via-primary/8 to-transparent",
+            "border border-primary/30"
+          )}
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-[0.05]"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
+              backgroundSize: "14px 14px",
+            }}
+          />
+          <div className="relative">
+            <div className="flex items-center gap-1.5 text-xs uppercase tracking-[0.14em] text-muted-foreground font-medium">
+              <Sparkles className="h-3 w-3 text-primary" aria-hidden="true" />
+              Maximum home price
             </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                At rate
-              </p>
-              <p className="font-display text-lg font-semibold tabular-nums mt-1">
-                {formatPercent(rate)}
-              </p>
+            <p
+              className={cn(
+                "font-display font-semibold tracking-tight tabular-nums mt-2",
+                "text-5xl md:text-6xl text-primary"
+              )}
+            >
+              {formatCurrency(maxPrice)}
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3 pt-4 border-t border-primary/20">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Monthly housing budget
+                </p>
+                <p className="font-display text-xl font-semibold tabular-nums mt-1">
+                  {formatCurrency(monthlyBudget)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                  At rate
+                </p>
+                <p className="font-display text-xl font-semibold tabular-nums mt-1">
+                  {formatPercent(rate)}
+                </p>
+              </div>
             </div>
           </div>
         </div>
