@@ -33,6 +33,13 @@ const stageAccent: Record<PipelineStage, string> = {
   Closed: "bg-[hsl(152_55%_42%)]",
 };
 
+const stageGradient: Record<PipelineStage, string> = {
+  Lead: "from-[hsl(210_70%_55%)] to-[hsl(210_70%_55%)]/20",
+  Showing: "from-[hsl(38_92%_50%)] to-[hsl(38_92%_50%)]/20",
+  "Under Contract": "from-[hsl(25_85%_55%)] to-[hsl(25_85%_55%)]/20",
+  Closed: "from-[hsl(152_55%_42%)] to-[hsl(152_55%_42%)]/20",
+};
+
 function daysSince(iso: string): number {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return 0;
@@ -43,9 +50,11 @@ function daysSince(iso: string): number {
 interface CardProps {
   item: PipelineItem;
   onDragStart: (e: React.DragEvent, id: string) => void;
+  isDragging: boolean;
+  onDragEnd: () => void;
 }
 
-function PipelineCard({ item, onDragStart }: CardProps) {
+function PipelineCard({ item, onDragStart, isDragging, onDragEnd }: CardProps) {
   const { removePipelineItem, updatePipelineNotes } = usePipeline();
   const [expanded, setExpanded] = React.useState(false);
   const [notesDraft, setNotesDraft] = React.useState(item.notes ?? "");
@@ -77,10 +86,13 @@ function PipelineCard({ item, onDragStart }: CardProps) {
     <div
       draggable
       onDragStart={(e) => onDragStart(e, item.id)}
+      onDragEnd={onDragEnd}
       className={cn(
         "group cursor-grab active:cursor-grabbing",
         "rounded-lg border border-border bg-card p-4 shadow-sm",
-        "transition-all hover:border-primary/40 hover:shadow-md"
+        "transition-all duration-200",
+        "hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5",
+        isDragging && "opacity-50 scale-95 shadow-lg"
       )}
     >
       <div className="flex items-start gap-2">
@@ -89,11 +101,11 @@ function PipelineCard({ item, onDragStart }: CardProps) {
           aria-hidden="true"
         />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold leading-snug break-words text-foreground">
+          <p className="font-display text-sm font-semibold leading-snug break-words text-foreground">
             {item.address}
           </p>
           {typeof item.price === "number" && item.price > 0 && (
-            <p className="mt-1 font-display text-lg font-semibold tracking-tight text-foreground tabular-nums">
+            <p className="mt-1.5 font-display text-xl font-semibold tracking-tight text-foreground tabular-nums">
               {formatCurrency(item.price)}
             </p>
           )}
@@ -110,7 +122,7 @@ function PipelineCard({ item, onDragStart }: CardProps) {
       {item.clientName && (
         <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
           <User className="size-3.5" aria-hidden="true" />
-          <span className="truncate">{item.clientName}</span>
+          <span className="font-display truncate">{item.clientName}</span>
         </div>
       )}
 
@@ -171,6 +183,7 @@ function PipelineCard({ item, onDragStart }: CardProps) {
 function PipelinePage() {
   const { pipeline, updatePipelineStage } = usePipeline();
   const [dragOver, setDragOver] = React.useState<PipelineStage | null>(null);
+  const [draggingId, setDraggingId] = React.useState<string | null>(null);
 
   const grouped = React.useMemo(() => {
     const map: Record<PipelineStage, PipelineItem[]> = {
@@ -209,6 +222,7 @@ function PipelinePage() {
   const handleDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData("text/plain", id);
     e.dataTransfer.effectAllowed = "move";
+    setDraggingId(id);
   };
 
   const handleDragOver = (e: React.DragEvent, stage: PipelineStage) => {
@@ -224,6 +238,7 @@ function PipelinePage() {
   const handleDrop = (e: React.DragEvent, stage: PipelineStage) => {
     e.preventDefault();
     setDragOver(null);
+    setDraggingId(null);
     const id = e.dataTransfer.getData("text/plain");
     if (!id) return;
     const item = pipeline.find((p) => p.id === id);
@@ -250,11 +265,15 @@ function PipelinePage() {
       <AddPropertyForm />
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="p-5">
+        <Card className="p-5 relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary to-primary/30"
+          />
           <p className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
             Total Pipeline Value
           </p>
-          <p className="mt-2 font-display text-3xl font-semibold tracking-tight tabular-nums text-foreground">
+          <p className="mt-2 font-display text-4xl font-semibold tracking-tight tabular-nums text-foreground">
             {formatCurrency(totalValue)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -263,7 +282,11 @@ function PipelinePage() {
           </p>
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-5 relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-[hsl(38_92%_50%)] to-[hsl(38_92%_50%)]/30"
+          />
           <p className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
             By Stage
           </p>
@@ -279,7 +302,7 @@ function PipelinePage() {
                     {s}
                   </span>
                 </div>
-                <span className="font-display text-xl font-semibold tabular-nums text-foreground">
+                <span className="font-display text-2xl font-semibold tabular-nums text-foreground">
                   {grouped[s].length}
                 </span>
               </div>
@@ -287,16 +310,20 @@ function PipelinePage() {
           </div>
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-5 relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-[hsl(25_85%_55%)] to-[hsl(25_85%_55%)]/30"
+          />
           <p className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
             Longest-Sitting Property
           </p>
           {longestSitting ? (
             <div className="mt-2">
-              <p className="font-display text-3xl font-semibold tracking-tight tabular-nums text-foreground">
+              <p className="font-display text-4xl font-semibold tracking-tight tabular-nums text-foreground">
                 {longestSitting.days}d
               </p>
-              <p className="mt-1 text-xs text-foreground truncate">
+              <p className="mt-1 text-xs text-foreground truncate font-display">
                 {longestSitting.item.address}
               </p>
               <p className="text-[11px] text-muted-foreground">
@@ -332,19 +359,26 @@ function PipelinePage() {
                 dragOver === s && "border-primary bg-primary/5"
               )}
             >
-              <div className="flex items-center justify-between mb-3 px-1">
+              <div className="flex items-center justify-between mb-3 px-1 pb-2 relative">
                 <div className="flex items-center gap-2">
                   <span
                     className={cn("size-2 rounded-full", stageAccent[s])}
                     aria-hidden="true"
                   />
-                  <h2 className="font-display text-sm font-semibold tracking-wide uppercase text-foreground">
+                  <h2 className="font-display text-sm font-semibold tracking-[0.08em] uppercase text-foreground">
                     {s}
                   </h2>
                 </div>
-                <span className="text-xs font-medium text-muted-foreground bg-card border border-border px-2 py-0.5 rounded-full">
+                <span className="text-xs font-medium text-muted-foreground bg-card border border-border px-2 py-0.5 rounded-full tabular-nums">
                   {grouped[s].length}
                 </span>
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "absolute bottom-0 left-1 right-1 h-px bg-gradient-to-r",
+                    stageGradient[s]
+                  )}
+                />
               </div>
               <div className="space-y-2.5 flex-1 min-h-[120px]">
                 {grouped[s].length === 0 ? (
@@ -357,6 +391,8 @@ function PipelinePage() {
                       key={item.id}
                       item={item}
                       onDragStart={handleDragStart}
+                      onDragEnd={() => setDraggingId(null)}
+                      isDragging={draggingId === item.id}
                     />
                   ))
                 )}
