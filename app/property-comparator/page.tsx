@@ -27,11 +27,15 @@ const CONNECTION_ERROR_TYPES = new Set([
   "unknown",
 ]);
 
+type Coords = { latitude: number; longitude: number } | null;
+
 function PropertyComparatorPage() {
   const { addComparison } = usePipeline();
   const [addresses, setAddresses] = useState<string[]>(["", ""]);
   // Tracks which rows came from a confirmed Google Places selection.
   const [confirmedPlaces, setConfirmedPlaces] = useState<boolean[]>([false, false]);
+  // Stores lat/lng for each row, populated when Google Places confirms a selection.
+  const [coordinates, setCoordinates] = useState<Coords[]>([null, null]);
   const [results, setResults] = useState<ZillowProperty[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -56,14 +60,22 @@ function PropertyComparatorPage() {
     };
   }, []);
 
-  const validAddresses = useMemo(
-    () => addresses.map((a) => a.trim()).filter((a) => a.length > 0),
+  const validIndices = useMemo(
+    () =>
+      addresses
+        .map((a, i) => ({ a: a.trim(), i }))
+        .filter((x) => x.a.length > 0)
+        .map((x) => x.i),
     [addresses]
   );
 
+  const validAddresses = useMemo(
+    () => validIndices.map((i) => addresses[i].trim()),
+    [validIndices, addresses]
+  );
+
   // Inline soft-warning: any address row with text that wasn't confirmed via
-  // the Google Places dropdown. Doesn't block submission — Zillow can still
-  // match many freeform strings — just nudges the agent for better hit rate.
+  // the Google Places dropdown. Without coordinates, the lookup will fail.
   const unconfirmedRows = useMemo(
     () =>
       addresses
@@ -121,26 +133,46 @@ function PropertyComparatorPage() {
 
   function handleChange(index: number, value: string) {
     setAddresses((prev) => prev.map((a, i) => (i === index ? value : a)));
-    // Manual edits invalidate any prior place confirmation for that row.
+    // Manual edits invalidate any prior place confirmation + coordinates.
     setConfirmedPlaces((prev) => {
       if (!prev[index]) return prev;
       const next = [...prev];
       next[index] = false;
       return next;
     });
+    setCoordinates((prev) => {
+      if (!prev[index]) return prev;
+      const next = [...prev];
+      next[index] = null;
+      return next;
+    });
   }
 
-  // The autocomplete child emits the confirmed formatted address as a plain
-  // string. We update the address state here exactly once, marking the row as
-  // place-confirmed. The child intentionally does NOT also call onChange when
-  // onPlaceSelected is wired, so this is the single source of truth and
-  // prevents duplicate state updates / processing.
-  function handlePlaceSelected(index: number, formatted: string) {
-    setAddresses((prev) => prev.map((a, i) => (i === index ? formatted : a)));
+  // The autocomplete child emits the confirmed formatted address along with
+  // its latitude/longitude. We store all three so the API call downstream has
+  // exact coordinates to hit Zillow's bycoordinates endpoint.
+  function handlePlaceSelected(
+    index: number,
+    formatted: string,
+    latitude: number,
+    longitude: number
+  ) {
+    setAddresses((prev) => {
+      const next = [...prev];
+      while (next.length <= index) next.push("");
+      next[index] = formatted;
+      return next;
+    });
     setConfirmedPlaces((prev) => {
       const next = [...prev];
       while (next.length <= index) next.push(false);
       next[index] = true;
+      return next;
+    });
+    setCoordinates((prev) => {
+      const next = [...prev];
+      while (next.length <= index) next.push(null);
+      next[index] = { latitude, longitude };
       return next;
     });
   }
@@ -148,6 +180,7 @@ function PropertyComparatorPage() {
   function handleAdd() {
     setAddresses((prev) => (prev.length >= 5 ? prev : [...prev, ""]));
     setConfirmedPlaces((prev) => (prev.length >= 5 ? prev : [...prev, false]));
+    setCoordinates((prev) => (prev.length >= 5 ? prev : [...prev, null]));
   }
 
   function handleRemove(index: number) {
@@ -159,13 +192,26 @@ function PropertyComparatorPage() {
       if (prev.length <= 2) return prev;
       return prev.filter((_, i) => i !== index);
     });
+    setCoordinates((prev) => {
+      if (prev.length <= 2) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
   }
 
-  async function runLookup(targets: string[]): Promise<ZillowProperty[]> {
+  async function runLookup(
+    targets: Array<{ address: string; coords: Coords }>
+  ): Promise<ZillowProperty[]> {
     const res = await fetch("/api/property-lookup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addresses: targets }),
+      body: JSON.stringify({
+        addresses: targets.map((t) => t.address),
+        coordinates: targets.map((t) =>
+          t.coords
+            ? { latitude: t.coords.latitude, longitude: t.coords.longitude }
+            : { latitude: null, longitude: null }
+        ),
+      }),
     });
     const data = await res.json();
     if (!res.ok && res.status !== 200) {
@@ -180,18 +226,37 @@ function PropertyComparatorPage() {
     return [];
   }
 
+  function buildTargets(): Array<{ address: string; coords: Coords }> {
+    return validIndices.map((i) => ({
+      address: addresses[i].trim(),
+      coords: coordinates[i] ?? null,
+    }));
+  }
+
   async function handleCompare() {
     if (validAddresses.length < 2) {
       toast.error("Enter at least 2 addresses to compare.");
       return;
     }
+
+    const targets = buildTargets();
+    const missingCoords = targets.filter((t) => !t.coords);
+    if (missingCoords.length > 0) {
+      toast.error(
+        `${missingCoords.length} ${
+          missingCoords.length === 1 ? "address needs" : "addresses need"
+        } to be selected from the Google dropdown for coordinates.`
+      );
+      return;
+    }
+
     setLoading(true);
     setResults(null);
     setRetryCooldowns({});
     setRetryAttempts({});
     startElapsedTimer();
     try {
-      const properties = await runLookup(validAddresses);
+      const properties = await runLookup(targets);
       setResults(properties);
       const okCount = properties.filter((p) => p.status === "ok").length;
       const connErrCount = properties.filter(
@@ -251,29 +316,43 @@ function PropertyComparatorPage() {
     const cooldownUntil = retryCooldowns[address] ?? 0;
     if (Date.now() < cooldownUntil) return;
 
+    // Find the original row to recover its coords.
+    const rowIdx = addresses.findIndex((a) => a.trim() === address.trim());
+    const coords = rowIdx >= 0 ? coordinates[rowIdx] ?? null : null;
+    if (!coords) {
+      toast.error(
+        "Can't retry — original coordinates were lost. Re-select the address from the Google dropdown."
+      );
+      return;
+    }
+
     const attempt = (retryAttempts[address] ?? 0) + 1;
     setRetryAttempts((prev) => ({ ...prev, [address]: attempt }));
 
     try {
-      const next = await runLookup([address]);
+      const next = await runLookup([{ address, coords }]);
       const replacement = next[0];
       if (!replacement) return;
 
       setResults((prev) =>
-        prev ? prev.map((p) => (p.address === address || p.address.trim() === address.trim() ? replacement : p)) : prev
+        prev
+          ? prev.map((p) =>
+              p.address === address || p.address.trim() === address.trim() ? replacement : p
+            )
+          : prev
       );
 
       if (replacement.status === "ok") {
         toast.success(`Retrieved ${replacement.address}`);
         setRetryCooldowns((prev) => {
-          const next = { ...prev };
-          delete next[address];
-          return next;
+          const n = { ...prev };
+          delete n[address];
+          return n;
         });
         setRetryAttempts((prev) => {
-          const next = { ...prev };
-          delete next[address];
-          return next;
+          const n = { ...prev };
+          delete n[address];
+          return n;
         });
       } else if (
         replacement.status === "error" &&
@@ -299,8 +378,18 @@ function PropertyComparatorPage() {
 
   async function handleRetryAllFailed() {
     if (!results) return;
-    const targets = connectionFailed.map((p) => p.address);
-    if (targets.length === 0) return;
+    const targets: Array<{ address: string; coords: Coords }> = [];
+    for (const p of connectionFailed) {
+      const rowIdx = addresses.findIndex((a) => a.trim() === p.address.trim());
+      const coords = rowIdx >= 0 ? coordinates[rowIdx] ?? null : null;
+      if (coords) targets.push({ address: p.address, coords });
+    }
+    if (targets.length === 0) {
+      toast.error(
+        "Can't retry — original coordinates were lost. Re-select addresses from the Google dropdown."
+      );
+      return;
+    }
 
     toast.info(
       `Retrying ${targets.length} ${targets.length === 1 ? "property" : "properties"}…`
@@ -381,6 +470,7 @@ function PropertyComparatorPage() {
   function handleClear() {
     setAddresses(["", ""]);
     setConfirmedPlaces([false, false]);
+    setCoordinates([null, null]);
     setResults(null);
     setRetryCooldowns({});
     setRetryAttempts({});
@@ -423,7 +513,8 @@ function PropertyComparatorPage() {
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           Enter up to 5 addresses to compare side by side. Start typing — Google
-          will suggest matches as you go.
+          will suggest matches as you go. Pick from the dropdown so we get exact
+          coordinates for the Zillow lookup.
         </p>
       </motion.header>
 
@@ -453,8 +544,8 @@ function PropertyComparatorPage() {
               <span className="font-medium text-foreground">Heads up:</span>{" "}
               {unconfirmedRows.length === 1 ? "1 address was" : `${unconfirmedRows.length} addresses were`}{" "}
               typed manually without picking from the Google dropdown. Zillow
-              lookups work better with confirmed addresses — keep typing and
-              select a suggestion, or proceed anyway.
+              lookups require coordinates — select a suggestion from the
+              dropdown to proceed.
             </div>
           )}
 
@@ -498,16 +589,6 @@ function PropertyComparatorPage() {
             <div className="mb-4 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Still working…</span>{" "}
               First requests can take 15–30s on Vercel cold-starts while RapidAPI warms up.
-              If this keeps happening on every compare, check{" "}
-              <a
-                href="https://rapidapi.com/api-vortex-api-vortex-default/api/zillow-com-live-data-scraper-api"
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-primary hover:underline"
-              >
-                RapidAPI status
-              </a>
-              .
             </div>
           )}
           <div
