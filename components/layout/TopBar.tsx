@@ -20,7 +20,7 @@ function TopBar({ title = "Dashboard", onMenuClick }: TopBarProps) {
   });
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/80 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/70 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
       <button
         type="button"
         onClick={onMenuClick}
@@ -31,29 +31,32 @@ function TopBar({ title = "Dashboard", onMenuClick }: TopBarProps) {
       </button>
 
       <div className="flex min-w-0 flex-1 items-baseline gap-3">
-        <h1 className="font-display text-xl font-semibold tracking-tight text-foreground truncate">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground truncate">
           {title}
         </h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline">·</span>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
+        <span className="hidden h-1 w-1 rounded-full bg-muted-foreground/40 sm:inline-block" aria-hidden="true" />
+        <span className="hidden font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">
           {today}
         </span>
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 sm:flex">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span className="text-xs font-medium text-muted-foreground">Live</span>
+        <div className="hidden items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1.5 backdrop-blur sm:flex">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Live</span>
         </div>
 
         <Link
           href="/profile"
           aria-label="Edit your agent profile"
           title={hasProfile ? `Signed in as ${branding.name}` : "Set up your profile"}
-          className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-2 py-1 pr-3 text-sm text-foreground transition-colors hover:bg-accent"
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-2 py-1 pr-3 text-sm text-foreground backdrop-blur transition-colors hover:bg-accent"
         >
           {hasProfile ? (
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 font-display text-[11px] font-semibold text-primary">
               {initials}
             </span>
           ) : (
