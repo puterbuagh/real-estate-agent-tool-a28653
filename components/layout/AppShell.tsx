@@ -21,22 +21,37 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const title = titleMap[pathname] ?? "AgentDesk";
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+    <div
+      className="min-h-screen bg-background"
+      style={{
+        display: "grid",
+        gridTemplateColumns: "256px 1fr",
+        minHeight: "100vh",
+      }}
+    >
+      <div className="hidden lg:block">
+        <Sidebar mobileOpen={false} onClose={() => setMobileOpen(false)} />
+      </div>
+      <div className="lg:hidden" style={{ display: "contents" }}>
+        <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+      </div>
       <div
-        className="flex-1 min-w-0 overflow-x-hidden"
-        style={{
-          marginLeft: "256px",
-          display: "flex",
-          flexDirection: "column",
-        }}
+        className="flex flex-col min-w-0 overflow-x-hidden"
+        style={{ gridColumn: "2 / 3" }}
       >
         <TopBar title={title} onMenuClick={() => setMobileOpen(true)} />
         <main
           data-app-main="true"
           style={{ flex: 1, overflowY: "auto", padding: "2rem", minWidth: 0 }}
         >
-          <div style={{ margin: "0 auto", width: "100%", maxWidth: "1600px", minWidth: 0 }}>
+          <div
+            style={{
+              margin: "0 auto",
+              width: "100%",
+              maxWidth: "1600px",
+              minWidth: 0,
+            }}
+          >
             {children}
           </div>
         </main>
