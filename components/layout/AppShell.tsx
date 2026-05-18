@@ -21,15 +21,25 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const title = titleMap[pathname] ?? "AgentDesk";
 
   return (
-    <div className="relative min-h-screen w-full max-w-full overflow-x-hidden bg-background">
+    <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
-      <div className="flex min-h-screen w-full max-w-full flex-col lg:pl-64">
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          marginLeft: "256px",
+          minWidth: 0,
+        }}
+      >
         <TopBar title={title} onMenuClick={() => setMobileOpen(true)} />
         <main
           data-app-main="true"
-          className="flex-1 w-full max-w-full overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
+          style={{ flex: 1, overflowY: "auto", padding: "2rem" }}
         >
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+          <div style={{ margin: "0 auto", width: "100%", maxWidth: "1600px" }}>
+            {children}
+          </div>
         </main>
       </div>
     </div>
