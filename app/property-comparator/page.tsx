@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Scale, Save, Printer, RotateCcw, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Scale, Save, Printer, RotateCcw, Search, RefreshCw, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -19,12 +19,44 @@ const AGENT = {
   email: "jordan@agentdesk.app",
 };
 
+const CONNECTION_ERROR_TYPES = new Set([
+  "connection_error",
+  "timeout",
+  "rate_limited",
+  "unknown",
+]);
+
 function PropertyComparatorPage() {
   const { addComparison } = usePipeline();
   const [addresses, setAddresses] = useState<string[]>(["", ""]);
   const [results, setResults] = useState<ZillowProperty[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
+
+  // Elapsed time tracker for long lookups — gives the user something to watch
+  // when Vercel cold-starts or RapidAPI is slow on the first call.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const loadStartRef = useRef<number>(0);
+
+  // Per-address connection-error retry state — exponential backoff cooldown.
+  // Keyed by address string. Value is the timestamp (ms) when retry re-enables.
+  const [retryCooldowns, setRetryCooldowns] = useState<Record<string, number>>({});
+  const [retryAttempts, setRetryAttempts] = useState<Record<string, number>>({});
+  const [nowTick, setNowTick] = useState(0);
+
+  // Drive countdown re-renders.
+  useEffect(() => {
+    if (Object.keys(retryCooldowns).length === 0) return;
+    const t = setInterval(() => setNowTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [retryCooldowns]);
+
+  useEffect(() => {
+    return () => {
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    };
+  }, []);
 
   const validAddresses = useMemo(
     () => addresses.map((a) => a.trim()).filter((a) => a.length > 0),
@@ -33,6 +65,16 @@ function PropertyComparatorPage() {
 
   const successful = useMemo(
     () => (results ?? []).filter((p): p is ZillowProperty => p.status === "ok"),
+    [results]
+  );
+
+  const connectionFailed = useMemo(
+    () =>
+      (results ?? []).filter(
+        (p) =>
+          p.status === "error" &&
+          CONNECTION_ERROR_TYPES.has((p.errorType ?? "unknown") as string)
+      ),
     [results]
   );
 
@@ -52,6 +94,22 @@ function PropertyComparatorPage() {
     ).zpid;
   }, [successful]);
 
+  function startElapsedTimer() {
+    loadStartRef.current = Date.now();
+    setElapsedMs(0);
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    elapsedTimerRef.current = setInterval(() => {
+      setElapsedMs(Date.now() - loadStartRef.current);
+    }, 200);
+  }
+
+  function stopElapsedTimer() {
+    if (elapsedTimerRef.current) {
+      clearInterval(elapsedTimerRef.current);
+      elapsedTimerRef.current = null;
+    }
+  }
+
   function handleChange(index: number, value: string) {
     setAddresses((prev) => prev.map((a, i) => (i === index ? value : a)));
   }
@@ -67,6 +125,26 @@ function PropertyComparatorPage() {
     });
   }
 
+  async function runLookup(targets: string[]): Promise<ZillowProperty[]> {
+    const res = await fetch("/api/property-lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ addresses: targets }),
+    });
+    const data = await res.json();
+    if (!res.ok && res.status !== 200) {
+      throw new Error(data?.error ?? data?.message ?? "Lookup failed");
+    }
+    if (Array.isArray(data?.properties)) {
+      return data.properties as ZillowProperty[];
+    }
+    // Fallback shape
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+    return [];
+  }
+
   async function handleCompare() {
     if (validAddresses.length < 2) {
       toast.error("Enter at least 2 addresses to compare.");
@@ -74,21 +152,30 @@ function PropertyComparatorPage() {
     }
     setLoading(true);
     setResults(null);
+    setRetryCooldowns({});
+    setRetryAttempts({});
+    startElapsedTimer();
     try {
-      const res = await fetch("/api/property-lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ addresses: validAddresses }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error ?? "Lookup failed");
-      }
-      const properties: ZillowProperty[] = data.properties ?? [];
+      const properties = await runLookup(validAddresses);
       setResults(properties);
       const okCount = properties.filter((p) => p.status === "ok").length;
-      if (okCount === 0) {
+      const connErrCount = properties.filter(
+        (p) =>
+          p.status === "error" &&
+          CONNECTION_ERROR_TYPES.has((p.errorType ?? "unknown") as string)
+      ).length;
+      if (okCount === 0 && connErrCount > 0) {
+        toast.error(
+          `Couldn't reach Zillow for ${connErrCount} ${
+            connErrCount === 1 ? "property" : "properties"
+          }. Use "Retry failed" below.`
+        );
+      } else if (okCount === 0) {
         toast.warning("No properties returned data. Try refining the addresses.");
+      } else if (connErrCount > 0) {
+        toast.warning(
+          `Compared ${okCount}, but ${connErrCount} failed to connect. Retry below.`
+        );
       } else {
         toast.success(`Compared ${okCount} ${okCount === 1 ? "property" : "properties"}.`);
       }
@@ -115,10 +202,116 @@ function PropertyComparatorPage() {
           photo: null,
           status: "error",
           errorMessage: message,
+          errorType: "connection_error",
         }))
       );
     } finally {
+      stopElapsedTimer();
       setLoading(false);
+    }
+  }
+
+  /** Retry a single address that failed with a connection error. */
+  async function handleRetryOne(address: string) {
+    if (!results) return;
+    const cooldownUntil = retryCooldowns[address] ?? 0;
+    if (Date.now() < cooldownUntil) return;
+
+    const attempt = (retryAttempts[address] ?? 0) + 1;
+    setRetryAttempts((prev) => ({ ...prev, [address]: attempt }));
+
+    try {
+      const next = await runLookup([address]);
+      const replacement = next[0];
+      if (!replacement) return;
+
+      setResults((prev) =>
+        prev ? prev.map((p) => (p.address === address || p.address.trim() === address.trim() ? replacement : p)) : prev
+      );
+
+      if (replacement.status === "ok") {
+        toast.success(`Retrieved ${replacement.address}`);
+        setRetryCooldowns((prev) => {
+          const next = { ...prev };
+          delete next[address];
+          return next;
+        });
+        setRetryAttempts((prev) => {
+          const next = { ...prev };
+          delete next[address];
+          return next;
+        });
+      } else if (
+        replacement.status === "error" &&
+        CONNECTION_ERROR_TYPES.has((replacement.errorType ?? "unknown") as string)
+      ) {
+        // Exponential backoff: 5s, 10s, 20s, 40s (max 60s)
+        const backoffMs = Math.min(60_000, 5_000 * Math.pow(2, attempt - 1));
+        setRetryCooldowns((prev) => ({ ...prev, [address]: Date.now() + backoffMs }));
+        toast.error(
+          `Still couldn't reach Zillow for this address. Retry in ${Math.ceil(
+            backoffMs / 1000
+          )}s.`
+        );
+      } else {
+        toast.warning(replacement.errorMessage ?? "No data found.");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Retry failed";
+      toast.error(message);
+      const backoffMs = Math.min(60_000, 5_000 * Math.pow(2, attempt - 1));
+      setRetryCooldowns((prev) => ({ ...prev, [address]: Date.now() + backoffMs }));
+    }
+  }
+
+  /** Retry every card currently in a connection-error state. */
+  async function handleRetryAllFailed() {
+    if (!results) return;
+    const targets = connectionFailed.map((p) => p.address);
+    if (targets.length === 0) return;
+
+    toast.info(
+      `Retrying ${targets.length} ${targets.length === 1 ? "property" : "properties"}…`
+    );
+
+    try {
+      const next = await runLookup(targets);
+      setResults((prev) => {
+        if (!prev) return prev;
+        const byAddress = new Map(next.map((p) => [p.address.trim(), p]));
+        return prev.map((p) => {
+          // Match by trimmed input address as a fallback
+          const replacement =
+            byAddress.get(p.address.trim()) ??
+            next.find((n) => n.address.trim() === p.address.trim());
+          if (
+            replacement &&
+            p.status === "error" &&
+            CONNECTION_ERROR_TYPES.has((p.errorType ?? "unknown") as string)
+          ) {
+            return replacement;
+          }
+          return p;
+        });
+      });
+
+      const okCount = next.filter((p) => p.status === "ok").length;
+      const stillFailed = next.filter(
+        (p) =>
+          p.status === "error" &&
+          CONNECTION_ERROR_TYPES.has((p.errorType ?? "unknown") as string)
+      ).length;
+
+      if (okCount > 0 && stillFailed === 0) {
+        toast.success(`Recovered ${okCount} ${okCount === 1 ? "property" : "properties"}.`);
+      } else if (okCount > 0) {
+        toast.warning(`Recovered ${okCount}, ${stillFailed} still failing.`);
+      } else {
+        toast.error(`All ${stillFailed} retries failed. Check RapidAPI status.`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Bulk retry failed";
+      toast.error(message);
     }
   }
 
@@ -157,6 +350,8 @@ function PropertyComparatorPage() {
   function handleClear() {
     setAddresses(["", ""]);
     setResults(null);
+    setRetryCooldowns({});
+    setRetryAttempts({});
     toast.success("Comparison cleared.");
   }
 
@@ -174,6 +369,11 @@ function PropertyComparatorPage() {
 
   const canCompare = validAddresses.length >= 2 && !loading;
   const hasResults = (results?.length ?? 0) > 0;
+  const elapsedSec = Math.floor(elapsedMs / 1000);
+  const showSlowHint = loading && elapsedSec >= 8;
+
+  // Suppress unused-var warning while still triggering re-renders for countdowns.
+  void nowTick;
 
   return (
     <div className="space-y-8">
@@ -225,9 +425,31 @@ function PropertyComparatorPage() {
 
       {loading && (
         <section className="print:hidden">
-          <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-            Fetching properties…
-          </h2>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Fetching properties…
+            </h2>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+              <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{elapsedSec}s elapsed</span>
+            </div>
+          </div>
+          {showSlowHint && (
+            <div className="mb-4 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Still working…</span>{" "}
+              First requests can take 15–30s on Vercel cold-starts while RapidAPI warms up.
+              If this keeps happening on every compare, check{" "}
+              <a
+                href="https://rapidapi.com/api-vortex-api-vortex-default/api/zillow-com-live-data-scraper-api"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-primary hover:underline"
+              >
+                RapidAPI status
+              </a>
+              .
+            </div>
+          )}
           <div
             className={cn(
               "grid gap-5",
@@ -245,6 +467,31 @@ function PropertyComparatorPage() {
 
       {!loading && hasResults && results && (
         <>
+          {connectionFailed.length > 0 && (
+            <section className="print:hidden">
+              <div className="flex flex-col gap-3 rounded-lg border border-[hsl(0_72%_50%/0.4)] bg-[hsl(0_72%_50%/0.06)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {connectionFailed.length} {connectionFailed.length === 1 ? "property" : "properties"}{" "}
+                    couldn&apos;t reach Zillow
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Usually a transient RapidAPI hiccup or Vercel cold-start. A bulk retry typically fixes it.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleRetryAllFailed}
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Retry failed ({connectionFailed.length})
+                </Button>
+              </div>
+            </section>
+          )}
+
           <section className="print:hidden">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -259,14 +506,25 @@ function PropertyComparatorPage() {
                 results.length >= 4 && "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
               )}
             >
-              {results.map((p, i) => (
-                <PropertyCard
-                  key={`${p.zpid ?? p.address}-${i}`}
-                  property={p}
-                  isBestValue={p.status === "ok" && p.zpid !== null && p.zpid === bestValueZpid}
-                  isHighestValue={p.status === "ok" && p.zpid !== null && p.zpid === highestValueZpid}
-                />
-              ))}
+              {results.map((p, i) => {
+                const cooldownUntil = retryCooldowns[p.address] ?? 0;
+                const remainingMs = Math.max(0, cooldownUntil - Date.now());
+                const remainingSec = Math.ceil(remainingMs / 1000);
+                const canRetry =
+                  p.status === "error" &&
+                  CONNECTION_ERROR_TYPES.has((p.errorType ?? "unknown") as string) &&
+                  remainingMs === 0;
+                return (
+                  <PropertyCard
+                    key={`${p.zpid ?? p.address}-${i}`}
+                    property={p}
+                    isBestValue={p.status === "ok" && p.zpid !== null && p.zpid === bestValueZpid}
+                    isHighestValue={p.status === "ok" && p.zpid !== null && p.zpid === highestValueZpid}
+                    onRetry={canRetry ? () => handleRetryOne(p.address) : undefined}
+                    retryCountdownSec={remainingSec > 0 ? remainingSec : undefined}
+                  />
+                );
+              })}
             </div>
           </section>
 
