@@ -86,6 +86,12 @@ export interface Comparison {
 /**
  * Global Agent Branding — single source of truth used by Sidebar,
  * Profile page, Client Report, and printed reports.
+ *
+ * googleApiKey is an OPTIONAL per-user key the agent pastes into their
+ * profile. Stored in localStorage alongside the rest of the branding so
+ * an agent who brings their own Google Places key can light up
+ * address-autocomplete features without us provisioning one server-side.
+ * Server-side Google calls should still prefer process.env.GOOGLE_API_KEY.
  */
 export interface AgentBranding {
   name: string;
@@ -94,6 +100,7 @@ export interface AgentBranding {
   email: string;
   logoUrl?: string | null;
   avatarUrl?: string | null;
+  googleApiKey?: string | null;
 }
 
 export interface FredObservation {
