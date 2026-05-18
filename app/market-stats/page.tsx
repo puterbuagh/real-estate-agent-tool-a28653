@@ -31,6 +31,7 @@ function SectionHeader({
 }
 
 async function getLiveRate(): Promise<number | null> {
+  // Reads FRED_API_KEY (server-only) via fetchMortgageRates → lib/fred.
   try {
     const data = await fetchMortgageRates();
     const rate = data?.thirtyYear?.current;
