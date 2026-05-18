@@ -30,6 +30,8 @@ const CONNECTION_ERROR_TYPES = new Set([
 function PropertyComparatorPage() {
   const { addComparison } = usePipeline();
   const [addresses, setAddresses] = useState<string[]>(["", ""]);
+  // Tracks which rows came from a confirmed Google Places selection.
+  const [confirmedPlaces, setConfirmedPlaces] = useState<boolean[]>([false, false]);
   const [results, setResults] = useState<ZillowProperty[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -57,6 +59,17 @@ function PropertyComparatorPage() {
   const validAddresses = useMemo(
     () => addresses.map((a) => a.trim()).filter((a) => a.length > 0),
     [addresses]
+  );
+
+  // Inline soft-warning: any address row with text that wasn't confirmed via
+  // the Google Places dropdown. Doesn't block submission — Zillow can still
+  // match many freeform strings — just nudges the agent for better hit rate.
+  const unconfirmedRows = useMemo(
+    () =>
+      addresses
+        .map((value, idx) => ({ value: value.trim(), idx, confirmed: confirmedPlaces[idx] }))
+        .filter((r) => r.value.length >= 6 && !r.confirmed),
+    [addresses, confirmedPlaces]
   );
 
   const successful = useMemo(
@@ -108,14 +121,35 @@ function PropertyComparatorPage() {
 
   function handleChange(index: number, value: string) {
     setAddresses((prev) => prev.map((a, i) => (i === index ? value : a)));
+    // Manual edits invalidate any prior place confirmation for that row.
+    setConfirmedPlaces((prev) => {
+      if (!prev[index]) return prev;
+      const next = [...prev];
+      next[index] = false;
+      return next;
+    });
+  }
+
+  function handlePlaceSelected(index: number, _formatted: string) {
+    setConfirmedPlaces((prev) => {
+      const next = [...prev];
+      while (next.length <= index) next.push(false);
+      next[index] = true;
+      return next;
+    });
   }
 
   function handleAdd() {
     setAddresses((prev) => (prev.length >= 5 ? prev : [...prev, ""]));
+    setConfirmedPlaces((prev) => (prev.length >= 5 ? prev : [...prev, false]));
   }
 
   function handleRemove(index: number) {
     setAddresses((prev) => {
+      if (prev.length <= 2) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+    setConfirmedPlaces((prev) => {
       if (prev.length <= 2) return prev;
       return prev.filter((_, i) => i !== index);
     });
@@ -340,6 +374,7 @@ function PropertyComparatorPage() {
 
   function handleClear() {
     setAddresses(["", ""]);
+    setConfirmedPlaces([false, false]);
     setResults(null);
     setRetryCooldowns({});
     setRetryAttempts({});
@@ -381,7 +416,8 @@ function PropertyComparatorPage() {
           Side-by-side property analysis
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Enter up to 5 addresses to compare side by side.
+          Enter up to 5 addresses to compare side by side. Start typing — Google
+          will suggest matches as you go.
         </p>
       </motion.header>
 
@@ -403,7 +439,19 @@ function PropertyComparatorPage() {
             onAdd={handleAdd}
             onRemove={handleRemove}
             disabled={loading}
+            onPlaceSelected={handlePlaceSelected}
           />
+
+          {unconfirmedRows.length > 0 && !loading && (
+            <div className="mt-4 rounded-md border border-[hsl(38_92%_50%/0.4)] bg-[hsl(38_92%_50%/0.06)] p-3 text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Heads up:</span>{" "}
+              {unconfirmedRows.length === 1 ? "1 address was" : `${unconfirmedRows.length} addresses were`}{" "}
+              typed manually without picking from the Google dropdown. Zillow
+              lookups work better with confirmed addresses — keep typing and
+              select a suggestion, or proceed anyway.
+            </div>
+          )}
+
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">
               {validAddresses.length < 2
