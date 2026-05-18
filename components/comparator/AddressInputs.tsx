@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Plus, X, MapPin, Info, Hash } from "lucide-react";
+import { Plus, X, MapPin, Info, Hash, Loader2, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
+import { loadGoogleMaps, type GoogleMapsLoadResult } from "@/lib/google-places";
 
 export type AddressInputMode = "address" | "mlsid";
 
@@ -17,6 +18,8 @@ export interface AddressInputsProps {
   /** Optional: per-row input mode toggle (address vs MLS ID). */
   modes?: AddressInputMode[];
   onModeChange?: (index: number, mode: AddressInputMode) => void;
+  /** Called when a row's value came from a confirmed Google Places selection. */
+  onPlaceSelected?: (index: number, formattedAddress: string) => void;
 }
 
 const EXAMPLE_ADDRESSES = [
@@ -50,7 +53,6 @@ function validateAddress(value: string): string | null {
   if (!/\b\d{5}(-\d{4})?\b/.test(s)) {
     return "Add a 5-digit ZIP code for best results.";
   }
-  // Warn on full state names — Zillow does much better with 2-letter codes.
   const longStates = /\b(Florida|Ohio|California|Georgia|Texas|New York|Pennsylvania|Illinois|Michigan|Virginia|Washington|Arizona|Colorado|Nevada|Oregon|Tennessee|Kentucky|Alabama|Indiana|Missouri|Wisconsin|Minnesota|Maryland|Massachusetts|Connecticut)\b/i;
   if (longStates.test(s)) {
     return "Use the 2-letter state code (e.g. FL, OH) instead of the full name.";
@@ -77,12 +79,51 @@ function AddressInputs({
   max = 5,
   modes,
   onModeChange,
+  onPlaceSelected,
 }: AddressInputsProps) {
   const canAdd = addresses.length < max;
   const canRemove = addresses.length > 2;
 
-  // Local mode state when no controlled `modes` prop is supplied — keeps the
-  // toggle functional even if the parent hasn't wired it up yet.
+  // ---------------------------------------------------------------------
+  // Google Maps loader state
+  // ---------------------------------------------------------------------
+  const [gmaps, setGmaps] = React.useState<GoogleMapsLoadResult>({
+    status: "idle",
+  });
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setGmaps({ status: "loading" });
+    loadGoogleMaps()
+      .then((result) => {
+        if (cancelled) return;
+        setGmaps(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setGmaps({
+          status: "error",
+          error: err instanceof Error ? err.message : "Failed to load Google Maps",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ---------------------------------------------------------------------
+  // Per-row Google Places Autocomplete instances
+  // ---------------------------------------------------------------------
+  const inputRefs = React.useRef<Array<HTMLInputElement | null>>([]);
+  const autocompleteRefs = React.useRef<
+    Array<google.maps.places.Autocomplete | null>
+  >([]);
+  // Tracks whether the value in a row came from a confirmed dropdown pick.
+  const [confirmedFromPlace, setConfirmedFromPlace] = React.useState<boolean[]>(
+    () => addresses.map(() => false)
+  );
+
+  // Local mode state when no controlled `modes` prop is supplied.
   const [localModes, setLocalModes] = React.useState<AddressInputMode[]>(() =>
     addresses.map(() => "address")
   );
@@ -94,11 +135,32 @@ function AddressInputs({
       next.length = addresses.length;
       return next;
     });
+    setConfirmedFromPlace((prev) => {
+      if (prev.length === addresses.length) return prev;
+      const next = [...prev];
+      while (next.length < addresses.length) next.push(false);
+      next.length = addresses.length;
+      return next;
+    });
   }, [addresses.length]);
 
   const effectiveModes: AddressInputMode[] = modes ?? localModes;
 
   function setMode(idx: number, mode: AddressInputMode) {
+    // Tear down autocomplete for this row when switching to MLS mode — the
+    // input element itself doesn't change but the listener is no longer wanted.
+    if (mode === "mlsid" && autocompleteRefs.current[idx]) {
+      try {
+        const ac = autocompleteRefs.current[idx];
+        if (ac && gmaps.status === "ready" && gmaps.google?.maps?.event) {
+          gmaps.google.maps.event.clearInstanceListeners(ac);
+        }
+      } catch {
+        /* ignore */
+      }
+      autocompleteRefs.current[idx] = null;
+    }
+
     if (onModeChange) onModeChange(idx, mode);
     else
       setLocalModes((prev) => {
@@ -106,6 +168,96 @@ function AddressInputs({
         next[idx] = mode;
         return next;
       });
+  }
+
+  // ---------------------------------------------------------------------
+  // Attach / detach Google Places Autocomplete to each address-mode input.
+  // Re-runs whenever Maps becomes ready, the row count changes, or a row
+  // toggles between address ⇄ MLS mode.
+  // ---------------------------------------------------------------------
+  React.useEffect(() => {
+    if (gmaps.status !== "ready") return;
+    const google = gmaps.google;
+    if (!google?.maps?.places?.Autocomplete) return;
+
+    const cleanups: Array<() => void> = [];
+
+    addresses.forEach((_, idx) => {
+      const mode = effectiveModes[idx] ?? "address";
+      const input = inputRefs.current[idx];
+
+      if (mode !== "address" || !input) {
+        // Detach if previously attached.
+        const existing = autocompleteRefs.current[idx];
+        if (existing) {
+          try {
+            google.maps.event.clearInstanceListeners(existing);
+          } catch {
+            /* ignore */
+          }
+          autocompleteRefs.current[idx] = null;
+        }
+        return;
+      }
+
+      // Already attached — leave it alone.
+      if (autocompleteRefs.current[idx]) return;
+
+      try {
+        const ac = new google.maps.places.Autocomplete(input, {
+          types: ["address"],
+          componentRestrictions: { country: ["us"] },
+          fields: ["place_id", "formatted_address", "address_components", "geometry"],
+        });
+
+        const listener = ac.addListener("place_changed", () => {
+          const place = ac.getPlace();
+          const formatted = place?.formatted_address?.trim();
+          if (formatted) {
+            onChange(idx, formatted);
+            setConfirmedFromPlace((prev) => {
+              const next = [...prev];
+              next[idx] = true;
+              return next;
+            });
+            if (onPlaceSelected) onPlaceSelected(idx, formatted);
+          }
+        });
+
+        autocompleteRefs.current[idx] = ac;
+        cleanups.push(() => {
+          try {
+            listener.remove();
+          } catch {
+            /* ignore */
+          }
+          try {
+            google.maps.event.clearInstanceListeners(ac);
+          } catch {
+            /* ignore */
+          }
+        });
+      } catch {
+        // Autocomplete construction failed for this row — fall back to plain text.
+      }
+    });
+
+    return () => {
+      cleanups.forEach((fn) => fn());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gmaps.status, addresses.length, effectiveModes.join("|")]);
+
+  // When the user manually edits an input after a confirmed pick, mark it
+  // as un-confirmed so the parent can show a "select from dropdown" hint.
+  function handleManualChange(idx: number, value: string) {
+    setConfirmedFromPlace((prev) => {
+      if (!prev[idx]) return prev;
+      const next = [...prev];
+      next[idx] = false;
+      return next;
+    });
+    onChange(idx, value);
   }
 
   const validations = React.useMemo(
@@ -116,24 +268,78 @@ function AddressInputs({
     [addresses, effectiveModes]
   );
 
-  return (
-    <div className="space-y-3">
+  // Decide what the tip banner says based on Maps loader state.
+  const tipBanner = (() => {
+    if (gmaps.status === "loading") {
+      return (
+        <div className="rounded-md border border-border bg-muted/30 p-3 flex items-start gap-2">
+          <Loader2
+            className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0 animate-spin"
+            aria-hidden="true"
+          />
+          <div className="text-[11px] leading-relaxed text-muted-foreground">
+            Loading Google Places suggestions… you can start typing in the
+            meantime.
+          </div>
+        </div>
+      );
+    }
+    if (gmaps.status === "error" || gmaps.status === "missing_key") {
+      const isMissingKey = gmaps.status === "missing_key";
+      return (
+        <div className="rounded-md border border-[hsl(38_92%_50%/0.5)] bg-[hsl(38_92%_50%/0.06)] p-3 flex items-start gap-2">
+          <AlertCircle
+            className="h-3.5 w-3.5 text-[hsl(35_85%_35%)] mt-0.5 shrink-0"
+            aria-hidden="true"
+          />
+          <div className="text-[11px] leading-relaxed text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {isMissingKey
+                ? "No Google API key configured."
+                : "Address autocomplete unavailable."}
+            </span>{" "}
+            {isMissingKey ? (
+              <>
+                Add one on your{" "}
+                <a href="/profile" className="font-medium text-primary hover:underline">
+                  Profile page
+                </a>{" "}
+                to enable Google Places suggestions. You can still type full
+                addresses by hand.
+              </>
+            ) : (
+              <>
+                You can still type addresses manually — use{" "}
+                <span className="font-mono text-foreground">
+                  123 Main St, Tampa, FL 33601
+                </span>
+                .
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return (
       <div className="rounded-md border border-border bg-muted/30 p-3 flex items-start gap-2">
         <Info
           className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0"
           aria-hidden="true"
         />
         <div className="text-[11px] leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">Tip:</span> use the full
-          USPS form —{" "}
-          <span className="font-mono text-foreground">
-            123 Main St, Tampa, FL 33601
-          </span>{" "}
-          — with 2-letter state code and 5-digit ZIP. Toggle to{" "}
+          <span className="font-medium text-foreground">Tip:</span> start typing
+          an address and pick from the Google dropdown for best Zillow match
+          rates. Toggle to{" "}
           <span className="font-medium text-foreground">MLS ID</span> on any row
           to bypass address parsing entirely.
         </div>
       </div>
+    );
+  })();
+
+  return (
+    <div className="space-y-3">
+      {tipBanner}
 
       {addresses.map((value, idx) => {
         const error = validations[idx];
@@ -145,6 +351,15 @@ function AddressInputs({
         const inputId = `address-input-${idx}`;
         const errorId = `${inputId}-error`;
         const IconCmp = mode === "mlsid" ? Hash : MapPin;
+        const isAutocompleteReady =
+          gmaps.status === "ready" && mode === "address";
+        const showSelectHint =
+          mode === "address" &&
+          isAutocompleteReady &&
+          value.trim().length >= 6 &&
+          !confirmedFromPlace[idx] &&
+          !error;
+
         return (
           <div key={idx} className="space-y-1">
             <div className="flex items-center gap-2">
@@ -155,15 +370,18 @@ function AddressInputs({
                 />
                 <Input
                   id={inputId}
+                  ref={(el) => {
+                    inputRefs.current[idx] = el;
+                  }}
                   value={value}
-                  onChange={(e) => onChange(idx, e.target.value)}
+                  onChange={(e) => handleManualChange(idx, e.target.value)}
                   placeholder={
                     mode === "mlsid"
                       ? `MLS ID ${idx + 1} — ${example}`
                       : `Property ${idx + 1} — ${example}`
                   }
                   disabled={disabled}
-                  autoComplete={mode === "mlsid" ? "off" : "street-address"}
+                  autoComplete={mode === "mlsid" ? "off" : "off"}
                   aria-label={
                     mode === "mlsid"
                       ? `Property ${idx + 1} MLS ID`
@@ -177,6 +395,12 @@ function AddressInputs({
                       "border-[hsl(38_92%_50%/0.6)] focus-visible:ring-[hsl(38_92%_50%/0.6)]"
                   )}
                 />
+                {mode === "address" && gmaps.status === "loading" && (
+                  <Loader2
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground animate-spin"
+                    aria-hidden="true"
+                  />
+                )}
               </div>
               <button
                 type="button"
@@ -224,6 +448,11 @@ function AddressInputs({
                   className="text-[11px] text-[hsl(35_85%_35%)] font-medium"
                 >
                   {error}
+                </p>
+              ) : showSelectHint ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Tip: pick an address from the Google dropdown for the best
+                  Zillow match.
                 </p>
               ) : value.trim().length === 0 ? (
                 <p className="text-[10px] text-muted-foreground/70">
