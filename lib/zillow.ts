@@ -11,18 +11,12 @@ import type { ZillowProperty, ComparisonProperty, ComparisonResult } from "@/typ
 
 const ZILLOW_HOST = "zillow-com-live-data-scraper-api.p.rapidapi.com";
 const ZILLOW_BASE = `https://${ZILLOW_HOST}`;
-const ZILLOW_ADDRESS_URL = `${ZILLOW_BASE}/byaddress`;
-const ZILLOW_MLSID_URL = `${ZILLOW_BASE}/bymlsid`;
+const ZILLOW_BYCOORDINATES_URL = `${ZILLOW_BASE}/bycoordinates`;
 
-// Bumped from 12s → 30s. Vercel serverless cold starts + RapidAPI proxy
-// latency frequently exceed 12s on the first request of a session, surfacing
-// as a misleading "connection error" when the upstream is actually fine.
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 2;
 
 function hasUsableServerKey(): string | null {
-  // SERVER-ONLY. Never reference NEXT_PUBLIC_RAPIDAPI_KEY — that would inline
-  // the key into the browser bundle and allow quota abuse.
   const key = process.env.RAPIDAPI_KEY;
   if (!key) return null;
   const trimmed = key.trim();
@@ -51,39 +45,6 @@ function toStringOrNull(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
   return s.length ? s : null;
-}
-
-function firstPhoto(raw: Record<string, unknown> | null | undefined): string | null {
-  if (!raw) return null;
-  const photos = (raw as { photos?: unknown }).photos;
-  if (Array.isArray(photos) && photos.length > 0) {
-    const p = photos[0] as unknown;
-    if (typeof p === "string") return p;
-    if (p && typeof p === "object") {
-      const obj = p as Record<string, unknown>;
-      if (typeof obj.url === "string") return obj.url;
-      const mixed = obj.mixedSources as Record<string, unknown> | undefined;
-      const jpegs = mixed && (mixed.jpeg as Array<{ url?: string }> | undefined);
-      if (Array.isArray(jpegs) && jpegs[0]?.url) return jpegs[0].url;
-    }
-  }
-  if (typeof (raw as { imgSrc?: unknown }).imgSrc === "string") {
-    return String((raw as { imgSrc?: unknown }).imgSrc);
-  }
-  if (typeof (raw as { hiResImageLink?: unknown }).hiResImageLink === "string") {
-    return String((raw as { hiResImageLink?: unknown }).hiResImageLink);
-  }
-  return null;
-}
-
-function formattedAddress(raw: Record<string, unknown> | null | undefined, fallback: string): string {
-  if (!raw) return fallback;
-  const addr = (raw as { address?: unknown }).address;
-  if (typeof addr === "string" && addr.trim()) return addr;
-  const a = (addr && typeof addr === "object" ? addr : raw) as Record<string, unknown>;
-  const parts = [a.streetAddress, a.city, a.state, a.zipcode].filter(Boolean);
-  if (parts.length) return parts.join(", ");
-  return fallback;
 }
 
 type ErrorType =
@@ -129,98 +90,30 @@ function normalizeProperty(
   raw: Record<string, unknown>,
   fallbackAddress: string
 ): ZillowProperty {
-  const price =
-    toNumber(raw.price) ??
-    toNumber(raw.listPrice) ??
-    toNumber(raw.listingPrice) ??
-    toNumber(raw.zestimate);
-  const zestimate = toNumber(raw.zestimate);
-  const livingArea = toNumber(raw.livingArea) ?? toNumber(raw.livingAreaValue);
-  const resoFacts = raw.resoFacts as Record<string, unknown> | undefined;
-  const explicitPpsf =
-    toNumber(raw.pricePerSquareFoot) ?? toNumber(resoFacts?.pricePerSquareFoot);
+  const price = toNumber(raw.price);
+  const livingArea = toNumber(raw.sqft);
   const pricePerSqft =
-    explicitPpsf ??
-    (price && livingArea && livingArea > 0 ? Math.round(price / livingArea) : null);
+    price && livingArea && livingArea > 0 ? Math.round(price / livingArea) : null;
 
   return {
     zpid: toStringOrNull(raw.zpid),
-    address: formattedAddress(raw, fallbackAddress),
+    address: toStringOrNull(raw.address) || fallbackAddress,
     price,
-    zestimate,
-    bedrooms: toNumber(raw.bedrooms),
-    bathrooms: toNumber(raw.bathrooms),
+    zestimate: null,
+    bedrooms: toNumber(raw.beds),
+    bathrooms: toNumber(raw.baths),
     livingArea,
-    lotSize:
-      (raw.lotSize as number | string | undefined) ??
-      (raw.lotAreaValue as number | string | undefined) ??
-      null,
-    yearBuilt: toNumber(raw.yearBuilt),
-    propertyType: toStringOrNull(
-      raw.propertyTypeDimension ?? raw.homeType ?? raw.propertyType
-    ),
-    daysOnMarket: toNumber(raw.daysOnZillow ?? raw.daysOnMarket),
+    lotSize: null,
+    yearBuilt: null,
+    propertyType: toStringOrNull(raw.property_type),
+    daysOnMarket: null,
     pricePerSqft,
-    lastSoldPrice: toNumber(raw.lastSoldPrice),
-    lastSoldDate: toStringOrNull(raw.dateSold ?? raw.lastSoldDate),
-    taxAssessedValue: toNumber(raw.taxAssessedValue),
-    photo: firstPhoto(raw),
+    lastSoldPrice: null,
+    lastSoldDate: null,
+    taxAssessedValue: null,
+    photo: toStringOrNull(raw.photo_url),
     status: "ok",
   };
-}
-
-function extractFirstRecord(
-  payload: unknown
-): Record<string, unknown> | null {
-  if (!payload) return null;
-  if (Array.isArray(payload)) {
-    return (payload[0] as Record<string, unknown>) ?? null;
-  }
-  if (typeof payload === "object") {
-    const obj = payload as Record<string, unknown>;
-    if (Array.isArray(obj.data) && obj.data.length > 0) {
-      return obj.data[0] as Record<string, unknown>;
-    }
-    if (Array.isArray(obj.results) && obj.results.length > 0) {
-      return obj.results[0] as Record<string, unknown>;
-    }
-    if (Array.isArray(obj.properties) && obj.properties.length > 0) {
-      return obj.properties[0] as Record<string, unknown>;
-    }
-    if (obj.property && typeof obj.property === "object") {
-      return obj.property as Record<string, unknown>;
-    }
-    if (obj.zpid || obj.address || obj.price || obj.zestimate) {
-      return obj;
-    }
-  }
-  return null;
-}
-
-/**
- * Normalize free-form address input to maximize Zillow match rate.
- * - Collapses whitespace
- * - Strips trailing punctuation
- * - Uppercases the 2-letter state abbreviation when it appears before a ZIP
- * - Ensures a comma between street and city if obviously missing
- */
-function normalizeAddressInput(raw: string): string {
-  let s = raw.replace(/\s+/g, " ").trim();
-  s = s.replace(/[,;\s]+$/g, "");
-  // Uppercase state code when followed by 5-digit ZIP
-  s = s.replace(/\b([a-zA-Z]{2})\s+(\d{5}(?:-\d{4})?)\b/g, (_m, st, zip) => `${String(st).toUpperCase()} ${zip}`);
-  // collapse double commas
-  s = s.replace(/,\s*,/g, ",");
-  return s;
-}
-
-/** Minimal address sanity check before burning a quota call. */
-function looksLikeAddress(input: string): boolean {
-  const s = input.trim();
-  if (s.length < 5) return false;
-  if (!/\d/.test(s)) return false;
-  if (!/[a-zA-Z]/.test(s)) return false;
-  return true;
 }
 
 async function fetchWithTimeout(
@@ -237,11 +130,6 @@ async function fetchWithTimeout(
   }
 }
 
-/**
- * Fetch with retry + exponential backoff for transient failures.
- * Retries on 5xx, 429, and network errors (incl. ENOTFOUND/ECONNRESET).
- * Returns the final Response or throws the last error.
- */
 async function fetchWithRetry(
   url: string,
   init: RequestInit,
@@ -277,7 +165,6 @@ async function fetchWithRetry(
         `[zillow] ${label} attempt ${attempt + 1} ${isAbort ? "timed out" : "threw"} after ${elapsed}ms (${errName}): ${errMsg}`
       );
       if (attempt < MAX_RETRIES) {
-        // Longer backoff on timeouts — upstream may be cold/warming.
         const backoff = isAbort ? 1500 * Math.pow(2, attempt) : 500 * Math.pow(2, attempt);
         await new Promise((r) => setTimeout(r, backoff));
         continue;
@@ -289,31 +176,88 @@ async function fetchWithRetry(
     : new Error("Network error after retries");
 }
 
-export async function fetchZillowProperty(address: string): Promise<ZillowProperty> {
-  const normalized = normalizeAddressInput(address);
+/**
+ * Finds the best match for an input address among Zillow results.
+ * Filters out results with missing coordinates before distance calc to avoid
+ * the divide-by-zero / null-coercion bug where toNumber()=>null becomes 0.
+ */
+function findBestMatch(
+  results: Array<Record<string, unknown>>,
+  inputAddress: string,
+  lat: number,
+  lng: number
+): Record<string, unknown> | null {
+  if (!results || results.length === 0) return null;
+
+  const input = inputAddress.toLowerCase().trim();
+
+  // First try exact address match (works even without coordinates).
+  const exact = results.find((r) => {
+    const addr = toStringOrNull(r.address);
+    return addr && addr.toLowerCase().trim() === input;
+  });
+  if (exact) return exact;
+
+  // Filter to results with valid numeric coordinates so distance math is real.
+  const withCoords = results.filter((r) => {
+    const rLat = toNumber(r.latitude);
+    const rLng = toNumber(r.longitude);
+    return rLat !== null && rLng !== null;
+  });
+
+  if (withCoords.length === 0) {
+    // No usable coordinates anywhere — fall back to the first result rather
+    // than returning null (Zillow occasionally omits geo on partial hits).
+    return results[0] ?? null;
+  }
+
+  let best = withCoords[0];
+  const bestLat0 = toNumber(best.latitude) as number;
+  const bestLng0 = toNumber(best.longitude) as number;
+  let bestDist = Math.abs(bestLat0 - lat) + Math.abs(bestLng0 - lng);
+
+  for (let i = 1; i < withCoords.length; i++) {
+    const current = withCoords[i];
+    const cLat = toNumber(current.latitude) as number;
+    const cLng = toNumber(current.longitude) as number;
+    const currDist = Math.abs(cLat - lat) + Math.abs(cLng - lng);
+    if (currDist < bestDist) {
+      best = current;
+      bestDist = currDist;
+    }
+  }
+
+  return best;
+}
+
+export async function fetchZillowPropertyByCoordinates(
+  address: string,
+  latitude: number,
+  longitude: number
+): Promise<ZillowProperty> {
   const apiKey = hasUsableServerKey();
 
   if (!apiKey) {
     console.warn("[zillow] RAPIDAPI_KEY missing or placeholder");
     return emptyProperty(
-      normalized,
+      address,
       "error",
       "Property lookup unavailable — RAPIDAPI_KEY is not configured on the server. Add it in Vercel → Project Settings → Environment Variables, then redeploy.",
       "missing_key"
     );
   }
 
-  if (!looksLikeAddress(normalized)) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return emptyProperty(
-      normalized,
+      address,
       "no_data",
-      "That doesn't look like a complete address. Include a street number, street name, city, and state — e.g. \"123 Main St, Tampa, FL 33601\".",
+      "Invalid coordinates provided.",
       "invalid_address"
     );
   }
 
-  const url = `${ZILLOW_ADDRESS_URL}?address=${encodeURIComponent(normalized)}`;
-  const label = `byaddress "${normalized}"`;
+  const url = `${ZILLOW_BYCOORDINATES_URL}?lat=${latitude}&lng=${longitude}&page=1&listType=for-sale`;
+  const label = `bycoordinates "${address}" (${latitude},${longitude})`;
   const start = Date.now();
 
   try {
@@ -333,34 +277,36 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
       } catch {
         /* ignore */
       }
-      console.warn(`[zillow] ${label} → HTTP ${res.status} after ${totalElapsed}ms ${bodySnippet}`);
+      console.warn(
+        `[zillow] ${label} → HTTP ${res.status} after ${totalElapsed}ms ${bodySnippet}`
+      );
 
       if (res.status === 404) {
         return emptyProperty(
-          normalized,
+          address,
           "no_data",
-          "Zillow has no record of this address. Try the full USPS form — \"123 Main St, Tampa, FL 33601\" — including city, state, and ZIP. If it's new construction or off-market, Zillow may not have indexed it yet.",
+          "Zillow has no record of this property. Try a different address or verify the property exists on zillow.com.",
           "not_found"
         );
       }
       if (res.status === 401 || res.status === 403) {
         return emptyProperty(
-          normalized,
+          address,
           "error",
-          "RapidAPI rejected the request (401/403). Verify your RAPIDAPI_KEY is active and that your account is subscribed to the \"Zillow.com Live Data Scraper\" host.",
+          "RapidAPI rejected the request (401/403). Verify your RAPIDAPI_KEY is active and that your account is subscribed to the 'Zillow.com Live Data Scraper' host.",
           "unauthorized"
         );
       }
       if (res.status === 429) {
         return emptyProperty(
-          normalized,
+          address,
           "error",
           "RapidAPI rate limit hit (429). Wait a moment and retry, or upgrade your RapidAPI subscription tier.",
           "rate_limited"
         );
       }
       return emptyProperty(
-        normalized,
+        address,
         "error",
         `Zillow upstream returned HTTP ${res.status}. This is usually a temporary RapidAPI/Zillow outage — try again in a minute.`,
         "connection_error"
@@ -368,35 +314,66 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
     }
 
     const payload = (await res.json().catch(() => null)) as unknown;
-    const raw = extractFirstRecord(payload);
 
-    if (!raw || (raw.error && !raw.zpid)) {
-      console.log(`[zillow] ${label} → no record in response (${totalElapsed}ms)`);
+    if (!payload || typeof payload !== "object") {
+      console.log(`[zillow] ${label} → invalid response (${totalElapsed}ms)`);
       return emptyProperty(
-        normalized,
+        address,
+        "error",
+        "Invalid response from Zillow API.",
+        "unknown"
+      );
+    }
+
+    const payloadObj = payload as Record<string, unknown>;
+    const results = Array.isArray(payloadObj.results)
+      ? (payloadObj.results as Array<Record<string, unknown>>)
+      : [];
+
+    if (results.length === 0) {
+      console.log(`[zillow] ${label} → no results (${totalElapsed}ms)`);
+      return emptyProperty(
+        address,
         "no_data",
-        "Zillow returned no matching property. Try the full form including city, state, and ZIP (e.g. \"123 Main St, Tampa, FL 33601\"), or look it up on zillow.com first to confirm it's indexed.",
+        "No properties found near these coordinates. The property may not be listed on Zillow or the coordinates may be incorrect.",
+        "not_found"
+      );
+    }
+
+    const bestMatch = findBestMatch(results, address, latitude, longitude);
+
+    if (!bestMatch) {
+      console.log(`[zillow] ${label} → no match found (${totalElapsed}ms)`);
+      return emptyProperty(
+        address,
+        "no_data",
+        "Could not match this address to a Zillow property. Try verifying the address on zillow.com.",
         "not_found"
       );
     }
 
     console.log(`[zillow] ${label} → ok (${totalElapsed}ms)`);
-    return normalizeProperty(raw, normalized);
+    return normalizeProperty(bestMatch, address);
   } catch (err) {
     const totalElapsed = Date.now() - start;
     const message = err instanceof Error ? err.message : "Network error";
     const isAbort = err instanceof Error && err.name === "AbortError";
     const errName = err instanceof Error ? err.name : "Error";
-    console.error(`[zillow] ${label} failed after ${totalElapsed}ms (${errName}): ${message}`);
+    console.error(
+      `[zillow] ${label} failed after ${totalElapsed}ms (${errName}): ${message}`
+    );
 
-    // Classify common Node fetch network failures more precisely.
     const lowered = message.toLowerCase();
-    const isDns = lowered.includes("enotfound") || lowered.includes("eai_again");
-    const isReset = lowered.includes("econnreset") || lowered.includes("econnrefused") || lowered.includes("socket hang up");
+    const isDns =
+      lowered.includes("enotfound") || lowered.includes("eai_again");
+    const isReset =
+      lowered.includes("econnreset") ||
+      lowered.includes("econnrefused") ||
+      lowered.includes("socket hang up");
 
     if (isAbort) {
       return emptyProperty(
-        normalized,
+        address,
         "error",
         "Zillow took too long to respond (30s timeout). The RapidAPI host may be slow or cold-starting — retry in a moment.",
         "timeout"
@@ -404,7 +381,7 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
     }
     if (isDns) {
       return emptyProperty(
-        normalized,
+        address,
         "error",
         "Couldn't resolve the RapidAPI host. This usually means the Zillow scraper host name changed or your network can't reach RapidAPI. Verify the host on your RapidAPI dashboard.",
         "connection_error"
@@ -412,7 +389,7 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
     }
     if (isReset) {
       return emptyProperty(
-        normalized,
+        address,
         "error",
         "RapidAPI dropped the connection. This is usually transient — retry the lookup.",
         "connection_error"
@@ -420,125 +397,10 @@ export async function fetchZillowProperty(address: string): Promise<ZillowProper
     }
 
     return emptyProperty(
-      normalized,
+      address,
       "error",
       `Couldn't reach Zillow: ${message}. Verify the server has network access and that your RapidAPI subscription is active.`,
       "connection_error"
-    );
-  }
-}
-
-export async function fetchZillowProperties(addresses: string[]): Promise<ZillowProperty[]> {
-  const cleaned = addresses.map((a) => a.trim()).filter((a) => a.length > 0);
-  // Parallel — one slow/failed lookup never blocks the others.
-  const settled = await Promise.allSettled(cleaned.map((a) => fetchZillowProperty(a)));
-  return settled.map((s, i) => {
-    if (s.status === "fulfilled") return s.value;
-    const message = s.reason instanceof Error ? s.reason.message : "Unknown error";
-    console.error(`[zillow] parallel lookup rejected for "${cleaned[i]}":`, message);
-    return emptyProperty(
-      cleaned[i] ?? "",
-      "error",
-      `Lookup failed: ${message}`,
-      "connection_error"
-    );
-  });
-}
-
-export async function fetchZillowPropertyByMlsId(
-  mlsid: string,
-  page: number = 1
-): Promise<ZillowProperty> {
-  const trimmed = mlsid.trim();
-  const apiKey = hasUsableServerKey();
-  const fallbackLabel = `MLS #${trimmed}`;
-
-  if (!apiKey) {
-    return emptyProperty(
-      fallbackLabel,
-      "error",
-      "Property lookup unavailable — RAPIDAPI_KEY is not configured on the server.",
-      "missing_key"
-    );
-  }
-
-  if (!trimmed) {
-    return emptyProperty(fallbackLabel, "no_data", "MLS ID is empty.", "invalid_address");
-  }
-
-  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-  const url = `${ZILLOW_MLSID_URL}?mlsid=${encodeURIComponent(trimmed)}&page=${safePage}`;
-  const label = `bymlsid "${trimmed}"`;
-  const start = Date.now();
-
-  try {
-    console.log(`[zillow] ${label} → ${ZILLOW_HOST}`);
-    const res = await fetchWithRetry(
-      url,
-      { method: "GET", headers: rapidApiHeaders(apiKey), cache: "no-store" },
-      label
-    );
-    const totalElapsed = Date.now() - start;
-
-    if (!res.ok) {
-      console.warn(`[zillow] ${label} → HTTP ${res.status} after ${totalElapsed}ms`);
-      if (res.status === 404) {
-        return emptyProperty(
-          fallbackLabel,
-          "no_data",
-          "No property found for that MLS ID. Double-check the number — MLS IDs vary by region and are not always indexed by Zillow.",
-          "not_found"
-        );
-      }
-      if (res.status === 401 || res.status === 403) {
-        return emptyProperty(
-          fallbackLabel,
-          "error",
-          "RapidAPI rejected the request — verify RAPIDAPI_KEY and your subscription to the Zillow Live Data Scraper host.",
-          "unauthorized"
-        );
-      }
-      if (res.status === 429) {
-        return emptyProperty(
-          fallbackLabel,
-          "error",
-          "RapidAPI rate limit hit. Try again in a moment.",
-          "rate_limited"
-        );
-      }
-      return emptyProperty(
-        fallbackLabel,
-        "error",
-        `Zillow request failed (HTTP ${res.status}).`,
-        "connection_error"
-      );
-    }
-
-    const payload = (await res.json().catch(() => null)) as unknown;
-    const raw = extractFirstRecord(payload);
-
-    if (!raw || (raw.error && !raw.zpid)) {
-      return emptyProperty(
-        fallbackLabel,
-        "no_data",
-        "No matching property in Zillow for that MLS ID.",
-        "not_found"
-      );
-    }
-
-    return normalizeProperty(raw, fallbackLabel);
-  } catch (err) {
-    const totalElapsed = Date.now() - start;
-    const message = err instanceof Error ? err.message : "Network error";
-    const isAbort = err instanceof Error && err.name === "AbortError";
-    console.error(`[zillow] ${label} failed after ${totalElapsed}ms:`, message);
-    return emptyProperty(
-      fallbackLabel,
-      "error",
-      isAbort
-        ? "Zillow took too long to respond (timeout)."
-        : `Couldn't reach Zillow: ${message}.`,
-      isAbort ? "timeout" : "connection_error"
     );
   }
 }
@@ -568,14 +430,37 @@ function toComparisonProperty(p: ZillowProperty): ComparisonProperty {
  * Client-side helper: looks up a single property via our server proxy route,
  * keeping the RapidAPI key off the browser.
  */
-export async function fetchPropertyByAddress(address: string): Promise<ComparisonResult> {
+export async function fetchPropertyByAddress(
+  address: string,
+  latitude?: number,
+  longitude?: number
+): Promise<ComparisonResult> {
   const trimmed = address.trim();
   if (!trimmed) {
     return { kind: "error", address: trimmed, message: "Empty address" };
   }
 
+  if (
+    latitude === undefined ||
+    longitude === undefined ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return {
+      kind: "error",
+      address: trimmed,
+      message:
+        "Coordinates are required. Please select an address from the Google Places dropdown.",
+    };
+  }
+
   try {
-    const res = await fetch(`/api/property-lookup?address=${encodeURIComponent(trimmed)}`, {
+    const params = new URLSearchParams({
+      address: trimmed,
+      latitude: String(latitude),
+      longitude: String(longitude),
+    });
+    const res = await fetch(`/api/property-lookup?${params.toString()}`, {
       method: "GET",
       cache: "no-store",
     });
@@ -613,7 +498,10 @@ export async function fetchPropertyByAddress(address: string): Promise<Compariso
       return {
         kind: "error",
         address: trimmed,
-        message: property?.errorMessage || data.error || "Data unavailable — check your connection",
+        message:
+          property?.errorMessage ??
+          data.error ??
+          "Data unavailable — check your connection",
       };
     }
 
@@ -640,15 +528,22 @@ export async function fetchPropertyByAddress(address: string): Promise<Compariso
  * never breaks the rest of the cards.
  */
 export async function fetchPropertiesByAddress(
-  addresses: string[]
+  addressesWithCoords: Array<{
+    address: string;
+    latitude?: number;
+    longitude?: number;
+  }>
 ): Promise<ComparisonResult[]> {
-  const cleaned = addresses.map((a) => a.trim()).filter((a) => a.length > 0);
-  const settled = await Promise.allSettled(cleaned.map((a) => fetchPropertyByAddress(a)));
+  const settled = await Promise.allSettled(
+    addressesWithCoords.map((item) =>
+      fetchPropertyByAddress(item.address, item.latitude, item.longitude)
+    )
+  );
   return settled.map((s, i) => {
     if (s.status === "fulfilled") return s.value;
     return {
       kind: "error" as const,
-      address: cleaned[i] ?? "",
+      address: addressesWithCoords[i]?.address ?? "",
       message: "Data unavailable — check your connection",
     };
   });
