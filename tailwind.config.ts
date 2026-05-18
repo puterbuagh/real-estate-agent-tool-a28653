@@ -16,8 +16,9 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        display: ["var(--font-display)", "Inter Tight", "ui-sans-serif", "system-ui"],
+        display: ["var(--font-display)", "Space Grotesk", "Inter Tight", "ui-sans-serif", "system-ui"],
         sans: ["var(--font-body)", "Inter", "ui-sans-serif", "system-ui"],
+        mono: ["var(--font-mono)", "JetBrains Mono", "ui-monospace", "monospace"],
       },
       colors: {
         background: "hsl(var(--background))",
