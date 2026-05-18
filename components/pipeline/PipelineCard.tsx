@@ -16,6 +16,7 @@ function PipelineCard({ item }: PipelineCardProps) {
   const { removePipelineItem, updatePipelineNotes } = usePipeline();
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState(item.notes ?? "");
+  const [isDragging, setIsDragging] = useState(false);
 
   const stageRef = item.stageEnteredAt ?? item.createdAt;
   const days = daysBetween(stageRef);
@@ -24,6 +25,11 @@ function PipelineCard({ item }: PipelineCardProps) {
   function handleDragStart(e: React.DragEvent<HTMLDivElement>) {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", item.id);
+    setIsDragging(true);
+  }
+
+  function handleDragEnd() {
+    setIsDragging(false);
   }
 
   function handleDelete() {
@@ -47,20 +53,22 @@ function PipelineCard({ item }: PipelineCardProps) {
     <Card
       draggable
       onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       className={cn(
-        "group p-3.5 cursor-grab active:cursor-grabbing",
-        "hover:border-primary/40 hover:shadow-md transition-all",
-        "select-none"
+        "group p-3.5 cursor-grab active:cursor-grabbing select-none",
+        "transition-all duration-200",
+        "hover:border-primary/40 hover:shadow-lg hover:-translate-y-0.5",
+        isDragging && "opacity-50 rotate-1 shadow-xl ring-2 ring-primary/40"
       )}
     >
       <div className="flex items-start gap-2">
         <MapPin className="size-4 text-primary mt-0.5 shrink-0" aria-hidden="true" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium leading-snug break-words text-foreground">
+          <p className="font-display text-sm font-semibold leading-snug break-words text-foreground tracking-tight">
             {item.address}
           </p>
           {typeof item.price === "number" && Number.isFinite(item.price) && (
-            <p className="font-display text-base font-semibold tracking-tight mt-1 tabular-nums">
+            <p className="font-display text-lg font-semibold tracking-tight mt-1 tabular-nums text-foreground">
               {formatCurrency(item.price)}
             </p>
           )}
@@ -78,7 +86,7 @@ function PipelineCard({ item }: PipelineCardProps) {
       {item.clientName && (
         <div className="flex items-center gap-1.5 mt-2.5 text-xs text-muted-foreground">
           <User className="size-3" aria-hidden="true" />
-          <span className="truncate">{item.clientName}</span>
+          <span className="font-display tracking-tight truncate">{item.clientName}</span>
         </div>
       )}
 
