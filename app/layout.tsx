@@ -15,17 +15,20 @@ export const metadata: Metadata = {
       { url: '/favicon.ico', sizes: 'any' },
     ],
   },
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="overflow-x-hidden">
       <head>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    
-    </head>
-      <body>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+      </head>
+      <body className="overflow-x-hidden min-h-screen">
         <AgentBrandingProvider>
           <PipelineProvider>
             <AppShell>{children}</AppShell>
