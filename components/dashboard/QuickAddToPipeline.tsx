@@ -71,7 +71,7 @@ function QuickAddToPipeline() {
   };
 
   return (
-    <section className="relative overflow-hidden rounded-lg border border-border bg-card">
+    <section className="relative w-full max-w-full overflow-hidden rounded-lg border border-border bg-card">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent"
@@ -105,8 +105,8 @@ function QuickAddToPipeline() {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_220px_auto]">
-          <div className="flex flex-col gap-1.5">
+        <div className="grid w-full max-w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_auto]">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
             <label
               htmlFor="qa-address"
               className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground"
@@ -126,7 +126,7 @@ function QuickAddToPipeline() {
               placeholder="123 Main St, Columbus, OH"
               autoComplete="street-address"
               className={cn(
-                "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground",
+                "h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground",
                 "placeholder:text-muted-foreground/70",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                 "transition-all duration-150",
@@ -138,7 +138,7 @@ function QuickAddToPipeline() {
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <label
               htmlFor="qa-stage"
               className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground"
@@ -152,7 +152,7 @@ function QuickAddToPipeline() {
               onFocus={() => setFocused("stage")}
               onBlur={() => setFocused(null)}
               className={cn(
-                "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground",
+                "h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                 "transition-all duration-150",
                 focused === "stage" && "shadow-[0_0_0_4px_hsl(var(--primary)/0.08)]"
@@ -166,15 +166,15 @@ function QuickAddToPipeline() {
             </select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <span className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-transparent select-none">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="hidden font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-transparent select-none lg:inline">
               Add
             </span>
             <Button
               type="submit"
               loading={submitting}
               disabled={submitting || address.trim().length < 3}
-              className="h-10 w-full sm:w-auto"
+              className="h-10 w-full"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add to Pipeline
@@ -196,5 +196,4 @@ function QuickAddToPipeline() {
   );
 }
 
-export { QuickAddToPipeline };
 export default QuickAddToPipeline;
