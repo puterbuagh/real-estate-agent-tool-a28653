@@ -12,8 +12,7 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="relative space-y-12">
-      {/* Atmospheric gradient mesh — anchors the dashboard with depth */}
+    <div className="relative w-full max-w-full space-y-12 overflow-x-hidden">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
@@ -24,7 +23,7 @@ export default function DashboardPage() {
       </div>
 
       <header className="relative flex flex-col gap-3 border-b border-border pb-10">
-        <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
@@ -33,7 +32,7 @@ export default function DashboardPage() {
           <span className="text-border">/</span>
           <span>{today}</span>
         </div>
-        <h1 className="font-display text-4xl font-semibold tracking-[-0.03em] text-foreground sm:text-5xl lg:text-6xl">
+        <h1 className="font-display text-3xl font-semibold tracking-[-0.03em] text-foreground sm:text-4xl md:text-5xl lg:text-6xl">
           Good morning.
           <br />
           <span className="text-muted-foreground">Here&rsquo;s your desk.</span>
@@ -44,7 +43,7 @@ export default function DashboardPage() {
         </p>
       </header>
 
-      <section aria-label="Key metrics" className="relative">
+      <section aria-label="Key metrics" className="relative w-full max-w-full">
         <div className="mb-4 flex items-center gap-3">
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             01 — Metrics
@@ -54,16 +53,20 @@ export default function DashboardPage() {
         <StatsGrid />
       </section>
 
-      <section aria-label="Recent activity" className="relative">
+      <section aria-label="Recent activity" className="relative w-full max-w-full">
         <div className="mb-4 flex items-center gap-3">
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
             02 — Activity
           </span>
           <span className="h-px flex-1 bg-border" />
         </div>
-        <div className="grid gap-8 lg:grid-cols-[1.6fr_1fr]">
-          <RecentComparisons />
-          <QuickAddToPipeline />
+        <div className="grid w-full max-w-full gap-8 lg:grid-cols-[1.6fr_1fr]">
+          <div className="min-w-0">
+            <RecentComparisons />
+          </div>
+          <div className="min-w-0">
+            <QuickAddToPipeline />
+          </div>
         </div>
       </section>
     </div>
