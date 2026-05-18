@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { Scale, Save, Printer, RotateCcw, Search, RefreshCw, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
@@ -33,19 +34,14 @@ function PropertyComparatorPage() {
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
 
-  // Elapsed time tracker for long lookups — gives the user something to watch
-  // when Vercel cold-starts or RapidAPI is slow on the first call.
   const [elapsedMs, setElapsedMs] = useState(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadStartRef = useRef<number>(0);
 
-  // Per-address connection-error retry state — exponential backoff cooldown.
-  // Keyed by address string. Value is the timestamp (ms) when retry re-enables.
   const [retryCooldowns, setRetryCooldowns] = useState<Record<string, number>>({});
   const [retryAttempts, setRetryAttempts] = useState<Record<string, number>>({});
   const [nowTick, setNowTick] = useState(0);
 
-  // Drive countdown re-renders.
   useEffect(() => {
     if (Object.keys(retryCooldowns).length === 0) return;
     const t = setInterval(() => setNowTick((n) => n + 1), 1000);
@@ -138,7 +134,6 @@ function PropertyComparatorPage() {
     if (Array.isArray(data?.properties)) {
       return data.properties as ZillowProperty[];
     }
-    // Fallback shape
     if (data?.error) {
       throw new Error(data.error);
     }
@@ -211,7 +206,6 @@ function PropertyComparatorPage() {
     }
   }
 
-  /** Retry a single address that failed with a connection error. */
   async function handleRetryOne(address: string) {
     if (!results) return;
     const cooldownUntil = retryCooldowns[address] ?? 0;
@@ -245,7 +239,6 @@ function PropertyComparatorPage() {
         replacement.status === "error" &&
         CONNECTION_ERROR_TYPES.has((replacement.errorType ?? "unknown") as string)
       ) {
-        // Exponential backoff: 5s, 10s, 20s, 40s (max 60s)
         const backoffMs = Math.min(60_000, 5_000 * Math.pow(2, attempt - 1));
         setRetryCooldowns((prev) => ({ ...prev, [address]: Date.now() + backoffMs }));
         toast.error(
@@ -264,7 +257,6 @@ function PropertyComparatorPage() {
     }
   }
 
-  /** Retry every card currently in a connection-error state. */
   async function handleRetryAllFailed() {
     if (!results) return;
     const targets = connectionFailed.map((p) => p.address);
@@ -280,7 +272,6 @@ function PropertyComparatorPage() {
         if (!prev) return prev;
         const byAddress = new Map(next.map((p) => [p.address.trim(), p]));
         return prev.map((p) => {
-          // Match by trimmed input address as a fallback
           const replacement =
             byAddress.get(p.address.trim()) ??
             next.find((n) => n.address.trim() === p.address.trim());
@@ -372,12 +363,16 @@ function PropertyComparatorPage() {
   const elapsedSec = Math.floor(elapsedMs / 1000);
   const showSlowHint = loading && elapsedSec >= 8;
 
-  // Suppress unused-var warning while still triggering re-renders for countdowns.
   void nowTick;
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-2 border-b border-border pb-8 print:hidden">
+      <motion.header
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="flex flex-col gap-2 border-b border-border pb-8 print:hidden"
+      >
         <div className="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
           <span>Property Comparator</span>
@@ -388,43 +383,54 @@ function PropertyComparatorPage() {
         <p className="max-w-2xl text-sm text-muted-foreground">
           Enter up to 5 addresses to compare side by side.
         </p>
-      </header>
+      </motion.header>
 
-      <Card className="p-6 print:hidden">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Scale className="h-4 w-4" aria-hidden="true" />
-          </span>
-          <h2 className="font-display text-base font-semibold tracking-tight">Addresses</h2>
-        </div>
-        <AddressInputs
-          addresses={addresses}
-          onChange={handleChange}
-          onAdd={handleAdd}
-          onRemove={handleRemove}
-          disabled={loading}
-        />
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-muted-foreground">
-            {validAddresses.length < 2
-              ? "Add at least 2 addresses to start comparing."
-              : `Ready to compare ${validAddresses.length} ${validAddresses.length === 1 ? "property" : "properties"}.`}
-          </p>
-          <Button
-            onClick={handleCompare}
-            disabled={!canCompare}
-            loading={loading}
-            size="lg"
-            className="sm:min-w-[220px]"
-          >
-            <Search className="h-4 w-4" aria-hidden="true" />
-            Compare Properties
-          </Button>
-        </div>
-      </Card>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
+      >
+        <Card className="p-6 print:hidden">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <Scale className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <h2 className="font-display text-base font-semibold tracking-tight">Addresses</h2>
+          </div>
+          <AddressInputs
+            addresses={addresses}
+            onChange={handleChange}
+            onAdd={handleAdd}
+            onRemove={handleRemove}
+            disabled={loading}
+          />
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              {validAddresses.length < 2
+                ? "Add at least 2 addresses to start comparing."
+                : `Ready to compare ${validAddresses.length} ${validAddresses.length === 1 ? "property" : "properties"}.`}
+            </p>
+            <Button
+              onClick={handleCompare}
+              disabled={!canCompare}
+              loading={loading}
+              size="lg"
+              className="sm:min-w-[220px]"
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+              Compare Properties
+            </Button>
+          </div>
+        </Card>
+      </motion.div>
 
       {loading && (
-        <section className="print:hidden">
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+          className="print:hidden"
+        >
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Fetching properties…
@@ -459,16 +465,28 @@ function PropertyComparatorPage() {
             )}
           >
             {validAddresses.map((_, i) => (
-              <PropertySkeletonCard key={i} />
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: i * 0.05 }}
+              >
+                <PropertySkeletonCard />
+              </motion.div>
             ))}
           </div>
-        </section>
+        </motion.section>
       )}
 
       {!loading && hasResults && results && (
         <>
           {connectionFailed.length > 0 && (
-            <section className="print:hidden">
+            <motion.section
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="print:hidden"
+            >
               <div className="flex flex-col gap-3 rounded-lg border border-[hsl(0_72%_50%/0.4)] bg-[hsl(0_72%_50%/0.06)] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-foreground">
@@ -489,7 +507,7 @@ function PropertyComparatorPage() {
                   Retry failed ({connectionFailed.length})
                 </Button>
               </div>
-            </section>
+            </motion.section>
           )}
 
           <section className="print:hidden">
@@ -515,21 +533,32 @@ function PropertyComparatorPage() {
                   CONNECTION_ERROR_TYPES.has((p.errorType ?? "unknown") as string) &&
                   remainingMs === 0;
                 return (
-                  <PropertyCard
+                  <motion.div
                     key={`${p.zpid ?? p.address}-${i}`}
-                    property={p}
-                    isBestValue={p.status === "ok" && p.zpid !== null && p.zpid === bestValueZpid}
-                    isHighestValue={p.status === "ok" && p.zpid !== null && p.zpid === highestValueZpid}
-                    onRetry={canRetry ? () => handleRetryOne(p.address) : undefined}
-                    retryCountdownSec={remainingSec > 0 ? remainingSec : undefined}
-                  />
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: i * 0.06, ease: "easeOut" }}
+                  >
+                    <PropertyCard
+                      property={p}
+                      isBestValue={p.status === "ok" && p.zpid !== null && p.zpid === bestValueZpid}
+                      isHighestValue={p.status === "ok" && p.zpid !== null && p.zpid === highestValueZpid}
+                      onRetry={canRetry ? () => handleRetryOne(p.address) : undefined}
+                      retryCountdownSec={remainingSec > 0 ? remainingSec : undefined}
+                    />
+                  </motion.div>
                 );
               })}
             </div>
           </section>
 
           {successful.length > 0 && (
-            <section className="print:hidden">
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2, ease: "easeOut" }}
+              className="print:hidden"
+            >
               <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                 Comparison table
               </h2>
@@ -537,7 +566,7 @@ function PropertyComparatorPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-muted/40 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      <tr className="border-b border-border bg-muted/40 text-left font-display text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                         <th className="px-4 py-3">Address</th>
                         <th className="px-4 py-3 text-right">Price</th>
                         <th className="px-4 py-3 text-right">Zestimate</th>
@@ -556,15 +585,21 @@ function PropertyComparatorPage() {
                         <tr
                           key={`${p.zpid ?? p.address}-row-${idx}`}
                           className={cn(
-                            "border-b border-border last:border-b-0",
-                            idx % 2 === 1 && "bg-muted/30"
+                            "border-b border-border last:border-b-0 transition-colors hover:bg-primary/5",
+                            idx % 2 === 1
+                              ? "bg-gradient-to-r from-muted/40 to-muted/20"
+                              : "bg-background"
                           )}
                         >
                           <td className="px-4 py-3 font-medium text-foreground max-w-[18rem] truncate">
                             {p.address}
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(p.price)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(p.zestimate)}</td>
+                          <td className="px-4 py-3 text-right font-display font-semibold tabular-nums">
+                            {formatCurrency(p.price)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-display tabular-nums">
+                            {formatCurrency(p.zestimate)}
+                          </td>
                           <td className="px-4 py-3 text-right tabular-nums">{p.bedrooms ?? "—"}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{p.bathrooms ?? "—"}</td>
                           <td className="px-4 py-3 text-right tabular-nums">
@@ -598,10 +633,15 @@ function PropertyComparatorPage() {
                   </table>
                 </div>
               </Card>
-            </section>
+            </motion.section>
           )}
 
-          <section className="flex flex-wrap items-center gap-3 print:hidden">
+          <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+            className="flex flex-wrap items-center gap-3 print:hidden"
+          >
             <Button onClick={handleSave} disabled={successful.length === 0}>
               <Save className="h-4 w-4" aria-hidden="true" />
               Save This Comparison
@@ -619,7 +659,7 @@ function PropertyComparatorPage() {
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
               Clear
             </Button>
-          </section>
+          </motion.section>
 
           {successful.length > 0 && (
             <section className="hidden print:block">
@@ -670,17 +710,23 @@ function PropertyComparatorPage() {
       )}
 
       {!loading && !hasResults && (
-        <Card className="p-12 print:hidden">
-          <div className="flex flex-col items-center text-center max-w-md mx-auto">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary mb-3">
-              <Scale className="h-6 w-6" aria-hidden="true" />
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+        >
+          <Card className="p-12 print:hidden">
+            <div className="flex flex-col items-center text-center max-w-md mx-auto">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary mb-3">
+                <Scale className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <h2 className="font-display text-lg font-semibold">Ready when you are</h2>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                Add at least two addresses above and hit Compare to see properties side by side, with Best Value and Highest Value badges auto-applied.
+              </p>
             </div>
-            <h2 className="font-display text-lg font-semibold">Ready when you are</h2>
-            <p className="text-sm text-muted-foreground mt-1.5">
-              Add at least two addresses above and hit Compare to see properties side by side, with Best Value and Highest Value badges auto-applied.
-            </p>
-          </div>
-        </Card>
+          </Card>
+        </motion.div>
       )}
     </div>
   );
