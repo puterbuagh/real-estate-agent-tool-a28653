@@ -67,21 +67,27 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-200 ease-out",
+          "grain-overlay",
           "lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between px-6 h-16 border-b border-sidebar-border">
+        <div className="relative z-10 flex items-center justify-between px-6 h-16 border-b border-sidebar-border">
           <Link href="/" className="flex items-center gap-2.5" onClick={onClose}>
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.4),0_4px_12px_hsl(var(--primary)/0.3)]">
               <Building2
                 className="h-4.5 w-4.5 text-primary-foreground"
                 strokeWidth={2.5}
               />
             </div>
-            <span className="font-display text-lg font-semibold tracking-tight">
-              AgentDesk
-            </span>
+            <div className="flex flex-col leading-none">
+              <span className="font-display text-lg font-semibold tracking-tight">
+                AgentDesk
+              </span>
+              <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-sidebar-foreground/40 mt-0.5">
+                v1.0 · ohio
+              </span>
+            </div>
           </Link>
           <button
             type="button"
@@ -93,8 +99,8 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-5">
-          <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/40">
+        <nav className="relative z-10 flex-1 overflow-y-auto px-3 py-5">
+          <div className="px-3 pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/40">
             Workspace
           </div>
           <ul className="space-y-0.5">
@@ -124,7 +130,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             })}
           </ul>
 
-          <div className="mt-6 px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/40">
+          <div className="mt-6 px-3 pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/40">
             Settings
           </div>
           <ul className="space-y-0.5">
@@ -147,7 +153,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                     <span className="truncate">{item.label}</span>
                     {!isConfigured && item.href === "/profile" && (
                       <span
-                        className="ml-auto inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+                        className="ml-auto inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary animate-pulse"
                         aria-label="Profile incomplete"
                       />
                     )}
@@ -158,7 +164,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           </ul>
         </nav>
 
-        <div className="border-t border-sidebar-border p-3">
+        <div className="relative z-10 border-t border-sidebar-border p-3">
           <Link
             href="/profile"
             onClick={onClose}
@@ -176,9 +182,9 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           >
             <div
               className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-semibold",
+                "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full font-display text-sm font-semibold tracking-tight",
                 isConfigured
-                  ? "bg-primary/20 text-sidebar-foreground"
+                  ? "bg-primary/20 text-sidebar-foreground ring-1 ring-primary/30"
                   : "bg-sidebar-foreground/10 text-sidebar-foreground/70"
               )}
               aria-hidden="true"
@@ -195,7 +201,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-sidebar-foreground">
+              <div className="font-display truncate text-sm font-medium text-sidebar-foreground tracking-tight">
                 {displayName}
               </div>
               <div className="truncate text-xs text-sidebar-foreground/50">
