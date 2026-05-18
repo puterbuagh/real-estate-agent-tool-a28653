@@ -21,37 +21,20 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const title = titleMap[pathname] ?? "AgentDesk";
 
   return (
-    <div
-      className="min-h-screen bg-background"
-      style={{
-        display: "grid",
-        gridTemplateColumns: "256px 1fr",
-        minHeight: "100vh",
-      }}
-    >
-      <div className="hidden lg:block">
-        <Sidebar mobileOpen={false} onClose={() => setMobileOpen(false)} />
-      </div>
-      <div className="lg:hidden" style={{ display: "contents" }}>
+    <div className="h-screen bg-background flex overflow-hidden">
+      <aside className="hidden lg:flex w-64 shrink-0 flex-none">
+        <Sidebar mobileOpen={false} onClose={() => {}} />
+      </aside>
+      <div className="lg:hidden">
         <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
       </div>
-      <div
-        className="flex flex-col min-w-0 overflow-x-hidden"
-        style={{ gridColumn: "2 / 3" }}
-      >
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopBar title={title} onMenuClick={() => setMobileOpen(true)} />
         <main
           data-app-main="true"
-          style={{ flex: 1, overflowY: "auto", padding: "2rem", minWidth: 0 }}
+          className="flex-1 overflow-y-auto overflow-x-hidden"
         >
-          <div
-            style={{
-              margin: "0 auto",
-              width: "100%",
-              maxWidth: "1600px",
-              minWidth: 0,
-            }}
-          >
+          <div className="mx-auto w-full max-w-[1600px] min-w-0 p-8">
             {children}
           </div>
         </main>
