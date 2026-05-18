@@ -87,11 +87,8 @@ export interface Comparison {
  * Global Agent Branding — single source of truth used by Sidebar,
  * Profile page, Client Report, and printed reports.
  *
- * googleApiKey is an OPTIONAL per-user key the agent pastes into their
- * profile. Stored in localStorage alongside the rest of the branding so
- * an agent who brings their own Google Places key can light up
- * address-autocomplete features without us provisioning one server-side.
- * Server-side Google calls should still prefer process.env.GOOGLE_API_KEY.
+ * Google API keys are NOT stored in the user profile. The Google Maps
+ * key is read directly from NEXT_PUBLIC_GOOGLE_MAPS_API_KEY by the client.
  */
 export interface AgentBranding {
   name: string;
@@ -99,8 +96,6 @@ export interface AgentBranding {
   phone: string;
   email: string;
   logoUrl?: string | null;
-  avatarUrl?: string | null;
-  googleApiKey?: string | null;
 }
 
 export interface FredObservation {
@@ -173,12 +168,6 @@ export interface MortgageCalcOutputs {
 // Google Places — used by the Property Comparator address autocomplete.
 // ---------------------------------------------------------------------------
 
-/**
- * Minimal structured result we keep from a Google Places Autocomplete
- * selection. We intentionally avoid hard-binding to the full
- * `google.maps.places.PlaceResult` shape so the rest of the app doesn't
- * need the Google types installed.
- */
 export interface GooglePlace {
   placeId: string;
   formattedAddress: string;
@@ -190,13 +179,6 @@ export interface GooglePlace {
   location?: { lat: number; lng: number } | null;
 }
 
-/**
- * The Property Comparator accepts two kinds of values per row:
- *   - a raw string (MLS ID mode, or freeform fallback)
- *   - a structured GooglePlace selected from the autocomplete dropdown
- *
- * Use the type guards below to discriminate at call sites.
- */
 export type AddressInputValue = string | GooglePlace;
 
 export function isGooglePlace(v: AddressInputValue): v is GooglePlace {
