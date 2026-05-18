@@ -198,13 +198,21 @@ function AddressInputs({
           const place = ac.getPlace();
           const formatted = place?.formatted_address?.trim();
           if (formatted) {
-            onChange(idx, formatted);
             setConfirmedFromPlace((prev) => {
               const next = [...prev];
               next[idx] = true;
               return next;
             });
-            if (onPlaceSelected) onPlaceSelected(idx, formatted);
+            if (onPlaceSelected) {
+              onPlaceSelected(idx, formatted);
+            } else {
+              // Fallback: if no place-selected handler is wired up, still
+              // propagate the formatted address via onChange so the parent
+              // sees the canonical value. When onPlaceSelected IS provided,
+              // the parent is expected to handle state updates itself to
+              // avoid duplicate processing.
+              onChange(idx, formatted);
+            }
           }
         });
 
@@ -230,7 +238,7 @@ function AddressInputs({
       cleanups.forEach((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gmaps.status, addresses.length, effectiveModes.join("|")]);
+  }, [gmaps.status, addresses.length, effectiveModes.join("|"), onChange, onPlaceSelected]);
 
   function handleManualChange(idx: number, value: string) {
     setConfirmedFromPlace((prev) => {
