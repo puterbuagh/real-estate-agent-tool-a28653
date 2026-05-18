@@ -72,7 +72,7 @@ function PropertyBlock({
   return (
     <section
       data-print-break-inside="avoid"
-      className="rounded-lg border border-border bg-card overflow-hidden"
+      className="report-property rounded-lg border border-border bg-card overflow-hidden"
     >
       <div className="grid gap-0 md:grid-cols-[280px_1fr]">
         <div className="relative aspect-[4/3] md:aspect-auto md:min-h-[200px] bg-muted">
@@ -103,9 +103,12 @@ function PropertyBlock({
             <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground font-medium">
               Property {index + 1}
             </p>
-            <h3 className="font-display text-lg font-semibold tracking-tight text-foreground mt-0.5">
+            <h3 className="font-display text-xl font-semibold tracking-tight text-foreground mt-0.5 break-words">
               {property.address || "Address unavailable"}
             </h3>
+            <p className="font-display text-3xl font-semibold tracking-tight tabular-nums text-primary mt-2">
+              {formatCurrency(price)}
+            </p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 border-t border-border">
@@ -269,18 +272,18 @@ function ReportPreview({
         </div>
       </div>
 
-      <Card className="p-8 md:p-10 space-y-8 bg-white">
-        <header className="flex flex-col gap-6 border-b border-border pb-6 md:flex-row md:items-start md:justify-between">
+      <div className="report-page p-8 md:p-10 space-y-8">
+        <header className="report-header flex flex-col gap-6 border-b border-border pb-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.22em] text-primary font-semibold">
               {safeBranding.brokerage}
             </p>
-            <h1 className="font-display text-3xl md:text-4xl font-semibold tracking-tight text-foreground mt-2">
+            <h1 className="font-display text-4xl md:text-5xl font-semibold tracking-tight text-foreground mt-2">
               Property Comparison Report
             </h1>
             <p className="text-sm text-muted-foreground mt-2">
               Prepared exclusively for{" "}
-              <span className="font-medium text-foreground">
+              <span className="font-display font-semibold tracking-tight text-foreground">
                 {safeClientName}
               </span>
               {" · "}
@@ -289,7 +292,7 @@ function ReportPreview({
           </div>
 
           <div className="rounded-md border border-border bg-muted/30 p-4 text-sm space-y-1.5 min-w-[220px]">
-            <p className="font-display font-semibold tracking-tight text-foreground">
+            <p className="font-display text-base font-semibold tracking-tight text-foreground">
               {safeBranding.name}
             </p>
             {safeBranding.brokerage && (
@@ -334,13 +337,13 @@ function ReportPreview({
           )}
         </div>
 
-        <footer className="border-t border-border pt-6 space-y-3">
+        <footer className="report-footer border-t border-border pt-6 space-y-3">
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             Data sourced from Zillow. Values are estimates and should not be considered appraisals.
             Comparison generated {formatDate(comparison.createdAt)}; rendered {reportDate}.
           </p>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span className="font-display font-semibold tracking-tight text-foreground">
+            <span className="font-display text-sm font-semibold tracking-tight text-foreground">
               {safeBranding.name}
               {safeBranding.brokerage ? ` · ${safeBranding.brokerage}` : ""}
             </span>
@@ -351,7 +354,7 @@ function ReportPreview({
             </span>
           </div>
         </footer>
-      </Card>
+      </div>
     </div>
   );
 }
