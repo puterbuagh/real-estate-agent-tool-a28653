@@ -9,7 +9,9 @@ import type {
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
 
 function getApiKey(): string | null {
-  const apiKey = process.env.NEXT_PUBLIC_FRED_API_KEY;
+  // SERVER-ONLY. Never reference NEXT_PUBLIC_FRED_API_KEY — that would inline
+  // the key into the browser bundle.
+  const apiKey = process.env.FRED_API_KEY;
   if (!apiKey) return null;
   const trimmed = apiKey.trim();
   if (!trimmed) return null;
