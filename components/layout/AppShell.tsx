@@ -24,12 +24,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
       <div
+        className="flex-1 min-w-0 overflow-x-hidden"
         style={{
-          flex: 1,
+          marginLeft: "256px",
           display: "flex",
           flexDirection: "column",
-          marginLeft: "256px",
-          minWidth: 0,
         }}
       >
         <TopBar title={title} onMenuClick={() => setMobileOpen(true)} />
