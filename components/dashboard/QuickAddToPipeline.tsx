@@ -23,7 +23,7 @@ const schema = z.object({
     .min(3, "Address must be at least 3 characters")
     .max(200, "Address is too long"),
   stage: z.enum(["Lead", "Showing", "Under Contract", "Closed"]),
-  website: z.string().max(0).optional(), // honeypot
+  website: z.string().max(0).optional(),
 });
 
 function QuickAddToPipeline() {
@@ -33,6 +33,7 @@ function QuickAddToPipeline() {
   const [website, setWebsite] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [focused, setFocused] = React.useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +46,6 @@ function QuickAddToPipeline() {
       return;
     }
 
-    // Honeypot: silently accept bots
     if (parsed.data.website && parsed.data.website.length > 0) {
       setAddress("");
       setStage("Lead");
@@ -56,7 +56,7 @@ function QuickAddToPipeline() {
     try {
       addPipelineItem(parsed.data.address, parsed.data.stage);
       toast.success("Added to pipeline", {
-        description: `${parsed.data.address} — ${parsed.data.stage}`,
+        description: `${parsed.data.address} \u2014 ${parsed.data.stage}`,
       });
       setAddress("");
       setStage("Lead");
@@ -71,18 +71,24 @@ function QuickAddToPipeline() {
   };
 
   return (
-    <section className="rounded-lg border border-border bg-card">
-      <header className="border-b border-border px-6 py-4">
-        <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
-          Quick Add to Pipeline
+    <section className="relative overflow-hidden rounded-lg border border-border bg-card">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent"
+      />
+      <header className="border-b border-border px-6 py-5">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-medium">
+          Quick capture
+        </p>
+        <h2 className="font-display text-xl font-semibold tracking-tight text-foreground mt-1">
+          Add to Pipeline
         </h2>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground mt-1">
           Drop a new property straight into your pipeline
         </p>
       </header>
 
       <form onSubmit={handleSubmit} noValidate className="px-6 py-5">
-        {/* Honeypot — hidden from users */}
         <div
           aria-hidden="true"
           className="absolute -left-[9999px] h-0 w-0 overflow-hidden"
@@ -103,7 +109,7 @@ function QuickAddToPipeline() {
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="qa-address"
-              className="text-xs font-medium text-foreground"
+              className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground"
             >
               Property address
             </label>
@@ -115,13 +121,16 @@ function QuickAddToPipeline() {
                 setAddress(e.target.value);
                 if (error) setError(null);
               }}
+              onFocus={() => setFocused("address")}
+              onBlur={() => setFocused(null)}
               placeholder="123 Main St, Columbus, OH"
               autoComplete="street-address"
               className={cn(
                 "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground",
                 "placeholder:text-muted-foreground/70",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                "transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                "transition-all duration-150",
+                focused === "address" && "shadow-[0_0_0_4px_hsl(var(--primary)/0.08)]",
                 error && "border-destructive focus-visible:ring-destructive"
               )}
               aria-invalid={!!error}
@@ -132,7 +141,7 @@ function QuickAddToPipeline() {
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="qa-stage"
-              className="text-xs font-medium text-foreground"
+              className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground"
             >
               Stage
             </label>
@@ -140,10 +149,13 @@ function QuickAddToPipeline() {
               id="qa-stage"
               value={stage}
               onChange={(e) => setStage(e.target.value as PipelineStage)}
+              onFocus={() => setFocused("stage")}
+              onBlur={() => setFocused(null)}
               className={cn(
                 "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                "transition-colors"
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                "transition-all duration-150",
+                focused === "stage" && "shadow-[0_0_0_4px_hsl(var(--primary)/0.08)]"
               )}
             >
               {STAGES.map((s) => (
@@ -155,7 +167,7 @@ function QuickAddToPipeline() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-transparent select-none">
+            <span className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-transparent select-none">
               Add
             </span>
             <Button
