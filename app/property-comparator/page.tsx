@@ -130,7 +130,13 @@ function PropertyComparatorPage() {
     });
   }
 
-  function handlePlaceSelected(index: number, _formatted: string) {
+  // The autocomplete child emits the confirmed formatted address as a plain
+  // string. We update the address state here exactly once, marking the row as
+  // place-confirmed. The child intentionally does NOT also call onChange when
+  // onPlaceSelected is wired, so this is the single source of truth and
+  // prevents duplicate state updates / processing.
+  function handlePlaceSelected(index: number, formatted: string) {
+    setAddresses((prev) => prev.map((a, i) => (i === index ? formatted : a)));
     setConfirmedPlaces((prev) => {
       const next = [...prev];
       while (next.length <= index) next.push(false);
