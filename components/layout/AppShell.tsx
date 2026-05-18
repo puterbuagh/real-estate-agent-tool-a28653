@@ -21,22 +21,15 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const title = titleMap[pathname] ?? "AgentDesk";
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <div className="relative min-h-screen w-full max-w-full overflow-x-hidden bg-background">
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
-      {/*
-        Layout strategy:
-        - Sidebar is `fixed left-0 w-64` (16rem / 256px) and only translated in at lg+.
-        - We apply `lg:pl-64` directly to <main> so the offset matches the sidebar
-          width exactly — no gap, no overlap. Horizontal page padding is handled
-          by the inner max-width container via px utilities.
-      */}
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen w-full max-w-full flex-col lg:pl-64">
         <TopBar title={title} onMenuClick={() => setMobileOpen(true)} />
         <main
           data-app-main="true"
-          className="flex-1 w-full px-4 py-6 sm:px-6 lg:pl-64 lg:pr-0 lg:py-8"
+          className="flex-1 w-full max-w-full overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
         >
-          <div className="mx-auto w-full max-w-[1600px] lg:px-8">{children}</div>
+          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
       </div>
     </div>
