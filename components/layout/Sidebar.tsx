@@ -65,24 +65,23 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       )}
 
       <aside
-        style={{ zIndex: 50 }}
         className={cn(
-          "fixed inset-y-0 left-0 flex h-full w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-200 ease-out",
+          "fixed inset-y-0 left-0 z-50 flex h-full w-64 max-w-[80vw] flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-transform duration-200 ease-out",
           "grain-overlay",
-          "lg:translate-x-0",
+          "lg:translate-x-0 lg:max-w-none",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="relative z-10 flex items-center justify-between px-6 h-16 border-b border-sidebar-border shrink-0">
-          <Link href="/" className="flex items-center gap-2.5" onClick={onClose}>
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.4),0_4px_12px_hsl(var(--primary)/0.3)]">
+          <Link href="/" className="flex items-center gap-2.5 min-w-0" onClick={onClose}>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.4),0_4px_12px_hsl(var(--primary)/0.3)]">
               <Building2
-                className="h-4.5 w-4.5 text-primary-foreground"
+                className="h-4 w-4 text-primary-foreground"
                 strokeWidth={2.5}
               />
             </div>
-            <div className="flex flex-col leading-none">
-              <span className="font-display text-lg font-semibold tracking-tight">
+            <div className="flex min-w-0 flex-col leading-none">
+              <span className="font-display text-lg font-semibold tracking-tight truncate">
                 AgentDesk
               </span>
               <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-sidebar-foreground/40 mt-0.5">
@@ -93,14 +92,14 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           <button
             type="button"
             onClick={onClose}
-            className="lg:hidden text-sidebar-foreground/70 hover:text-sidebar-foreground"
+            className="lg:hidden text-sidebar-foreground/70 hover:text-sidebar-foreground shrink-0"
             aria-label="Close navigation"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <nav className="relative z-10 flex-1 overflow-y-auto px-3 py-5">
+        <nav className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-3 py-5">
           <div className="px-3 pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/40">
             Workspace
           </div>
