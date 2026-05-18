@@ -168,3 +168,46 @@ export interface MortgageCalcOutputs {
   totalCost: number;
   loanAmount: number;
 }
+
+// ---------------------------------------------------------------------------
+// Google Places — used by the Property Comparator address autocomplete.
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal structured result we keep from a Google Places Autocomplete
+ * selection. We intentionally avoid hard-binding to the full
+ * `google.maps.places.PlaceResult` shape so the rest of the app doesn't
+ * need the Google types installed.
+ */
+export interface GooglePlace {
+  placeId: string;
+  formattedAddress: string;
+  addressComponents?: Array<{
+    longName: string;
+    shortName: string;
+    types: string[];
+  }>;
+  location?: { lat: number; lng: number } | null;
+}
+
+/**
+ * The Property Comparator accepts two kinds of values per row:
+ *   - a raw string (MLS ID mode, or freeform fallback)
+ *   - a structured GooglePlace selected from the autocomplete dropdown
+ *
+ * Use the type guards below to discriminate at call sites.
+ */
+export type AddressInputValue = string | GooglePlace;
+
+export function isGooglePlace(v: AddressInputValue): v is GooglePlace {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as GooglePlace).formattedAddress === "string" &&
+    typeof (v as GooglePlace).placeId === "string"
+  );
+}
+
+export function isMLSId(v: AddressInputValue): v is string {
+  return typeof v === "string";
+}
