@@ -111,7 +111,7 @@ function AddressInputs({
 
   const inputRefs = React.useRef<Array<HTMLInputElement | null>>([]);
   const autocompleteRefs = React.useRef<
-    Array<google.maps.places.Autocomplete | null>
+    Array<{ cleanup: () => void } | null>
   >([]);
   const [confirmedFromPlace, setConfirmedFromPlace] = React.useState<boolean[]>(
     () => addresses.map(() => false)
@@ -142,10 +142,7 @@ function AddressInputs({
   function setMode(idx: number, mode: AddressInputMode) {
     if (mode === "mlsid" && autocompleteRefs.current[idx]) {
       try {
-        const ac = autocompleteRefs.current[idx];
-        if (ac && gmaps.status === "ready" && gmaps.google?.maps?.event) {
-          gmaps.google.maps.event.clearInstanceListeners(ac);
-        }
+        autocompleteRefs.current[idx]?.cleanup();
       } catch {
         /* ignore */
       }
@@ -160,6 +157,15 @@ function AddressInputs({
         return next;
       });
   }
+
+  const onPlaceSelectedRef = React.useRef(onPlaceSelected);
+  const onChangeRef = React.useRef(onChange);
+  React.useEffect(() => {
+    onPlaceSelectedRef.current = onPlaceSelected;
+  }, [onPlaceSelected]);
+  React.useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   React.useEffect(() => {
     if (gmaps.status !== "ready") return;
@@ -176,7 +182,7 @@ function AddressInputs({
         const existing = autocompleteRefs.current[idx];
         if (existing) {
           try {
-            google.maps.event.clearInstanceListeners(existing);
+            existing.cleanup();
           } catch {
             /* ignore */
           }
@@ -187,58 +193,74 @@ function AddressInputs({
 
       if (autocompleteRefs.current[idx]) return;
 
+      const handleSelected = (formatted: string) => {
+        const trimmed = formatted.trim();
+        if (!trimmed) return;
+        debug(`row ${idx}: place selected →`, trimmed);
+        setConfirmedFromPlace((prev) => {
+          const next = [...prev];
+          next[idx] = true;
+          return next;
+        });
+        if (input) {
+          input.value = trimmed;
+        }
+        if (onPlaceSelectedRef.current) {
+          onPlaceSelectedRef.current(idx, trimmed);
+        } else {
+          onChangeRef.current(idx, trimmed);
+        }
+      };
+
       try {
         const ac = new google.maps.places.Autocomplete(input, {
           types: ["address"],
           componentRestrictions: { country: ["us"] },
-          fields: ["place_id", "formatted_address", "address_components", "geometry"],
+          fields: [
+            "place_id",
+            "formatted_address",
+            "address_components",
+            "geometry",
+          ],
         });
 
         const listener = ac.addListener("place_changed", () => {
           const place = ac.getPlace();
           const formatted = place?.formatted_address?.trim();
-          if (formatted) {
-            setConfirmedFromPlace((prev) => {
-              const next = [...prev];
-              next[idx] = true;
-              return next;
-            });
-            if (onPlaceSelected) {
-              onPlaceSelected(idx, formatted);
-            } else {
-              // Fallback: if no place-selected handler is wired up, still
-              // propagate the formatted address via onChange so the parent
-              // sees the canonical value. When onPlaceSelected IS provided,
-              // the parent is expected to handle state updates itself to
-              // avoid duplicate processing.
-              onChange(idx, formatted);
-            }
-          }
+          if (formatted) handleSelected(formatted);
         });
 
-        autocompleteRefs.current[idx] = ac;
-        cleanups.push(() => {
-          try {
-            listener.remove();
-          } catch {
-            /* ignore */
-          }
-          try {
-            google.maps.event.clearInstanceListeners(ac);
-          } catch {
-            /* ignore */
-          }
-        });
+        autocompleteRefs.current[idx] = {
+          cleanup: () => {
+            try {
+              listener.remove();
+            } catch {
+              /* ignore */
+            }
+            try {
+              google.maps.event.clearInstanceListeners(ac);
+            } catch {
+              /* ignore */
+            }
+          },
+        };
+        cleanups.push(() => autocompleteRefs.current[idx]?.cleanup());
       } catch (err) {
-        debug(`row ${idx}: Autocomplete construction failed`, err);
+        debug(`row ${idx}: legacy Autocomplete construction failed`, err);
       }
     });
 
     return () => {
-      cleanups.forEach((fn) => fn());
+      cleanups.forEach((fn) => {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gmaps.status, addresses.length, effectiveModes.join("|"), onChange, onPlaceSelected]);
+  }, [gmaps.status, addresses.length, effectiveModes.join("|")]);
 
   function handleManualChange(idx: number, value: string) {
     setConfirmedFromPlace((prev) => {
