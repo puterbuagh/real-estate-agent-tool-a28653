@@ -35,9 +35,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <TopBar title={title} onMenuClick={() => setMobileOpen(true)} />
         <main
           data-app-main="true"
-          style={{ flex: 1, overflowY: "auto", padding: "2rem" }}
+          style={{ flex: 1, overflowY: "auto", padding: "2rem", minWidth: 0 }}
         >
-          <div style={{ margin: "0 auto", width: "100%", maxWidth: "1600px" }}>
+          <div style={{ margin: "0 auto", width: "100%", maxWidth: "1600px", minWidth: 0 }}>
             {children}
           </div>
         </main>
