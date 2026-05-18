@@ -1,29 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import {
-  fetchZillowProperties,
-  fetchZillowProperty,
-  fetchZillowPropertyByMlsId,
-} from "@/lib/zillow";
+import { fetchZillowPropertyByCoordinates } from "@/lib/zillow";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-// Vercel default is 10s — Zillow lookups + retries can exceed that on cold
-// starts. Bumping to 60s gives the upstream room to respond.
 export const maxDuration = 60;
 
-// ---------------------------------------------------------------------------
-// Per-user in-memory rate limiter (sliding window).
-// ---------------------------------------------------------------------------
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
 
 const rateBuckets = new Map<string, number[]>();
 
-function checkRateLimit(userId: string): {
-  ok: boolean;
-  retryAfterSec: number;
-} {
+function checkRateLimit(userId: string): { ok: boolean; retryAfterSec: number } {
   const now = Date.now();
   const cutoff = now - RATE_LIMIT_WINDOW_MS;
   const prior = rateBuckets.get(userId) ?? [];
@@ -50,8 +38,7 @@ function checkRateLimit(userId: string): {
 }
 
 async function requireUser(): Promise<
-  | { ok: true; userId: string }
-  | { ok: false; response: NextResponse }
+  { ok: true; userId: string } | { ok: false; response: NextResponse }
 > {
   const supabase = createSupabaseServerClient();
   if (!supabase) {
@@ -115,12 +102,36 @@ function missingKeyResponse() {
   });
 }
 
-/** Sanitize address/mlsid for logs — avoids leaking PII in serverless logs. */
 function sanitizeForLog(input: string | null | undefined, max = 60): string {
   if (!input) return "-";
   const trimmed = String(input).trim();
   if (trimmed.length <= max) return trimmed;
   return `${trimmed.slice(0, max)}…`;
+}
+
+function invalidCoordsProperty(address: string) {
+  return {
+    zpid: null,
+    address,
+    price: null,
+    zestimate: null,
+    bedrooms: null,
+    bathrooms: null,
+    livingArea: null,
+    lotSize: null,
+    yearBuilt: null,
+    propertyType: null,
+    daysOnMarket: null,
+    pricePerSqft: null,
+    lastSoldPrice: null,
+    lastSoldDate: null,
+    taxAssessedValue: null,
+    photo: null,
+    status: "error" as const,
+    errorMessage:
+      "Missing or invalid coordinates. Select this address from the Google Places dropdown to attach latitude/longitude.",
+    errorType: "invalid_address" as const,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -131,21 +142,56 @@ export async function GET(req: NextRequest) {
   const limited = enforceRateLimit(auth.userId);
   if (limited) return limited;
 
-  const mlsid = req.nextUrl.searchParams.get("mlsid");
   const address = req.nextUrl.searchParams.get("address");
-  const pageParam = req.nextUrl.searchParams.get("page");
+  const latParam = req.nextUrl.searchParams.get("latitude");
+  const lngParam = req.nextUrl.searchParams.get("longitude");
 
   console.log(
-    `[property-lookup GET] mlsid=${sanitizeForLog(mlsid)} address=${sanitizeForLog(address)} user=${auth.userId}`
+    `[property-lookup GET] address=${sanitizeForLog(address)} lat=${latParam} lng=${lngParam} user=${auth.userId}`
   );
 
-  if (!mlsid?.trim() && !address?.trim()) {
+  if (!address?.trim()) {
     return NextResponse.json(
       {
         ok: false,
         error: "missing_param",
         errorType: "invalid_address",
-        message: "Provide an 'address' or 'mlsid' query parameter.",
+        message: "Provide an 'address' query parameter.",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!latParam || !lngParam) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "missing_coordinates",
+        errorType: "invalid_address",
+        message:
+          "Latitude and longitude are required. Please select an address from the Google Places dropdown.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const latitude = Number(latParam);
+  const longitude = Number(lngParam);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "invalid_coordinates",
+        errorType: "invalid_address",
+        message: "Invalid latitude or longitude values.",
       },
       { status: 400 }
     );
@@ -156,16 +202,17 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const property = mlsid?.trim()
-      ? await fetchZillowPropertyByMlsId(
-          mlsid.trim(),
-          pageParam ? Number(pageParam) : 1
-        )
-      : await fetchZillowProperty((address as string).trim());
+    const property = await fetchZillowPropertyByCoordinates(
+      address.trim(),
+      latitude,
+      longitude
+    );
 
     const elapsed = Date.now() - startedAt;
     console.log(
-      `[property-lookup GET] done in ${elapsed}ms status=${property.status}${property.errorType ? ` (${property.errorType})` : ""}`
+      `[property-lookup GET] done in ${elapsed}ms status=${property.status}${
+        property.errorType ? ` (${property.errorType})` : ""
+      }`
     );
 
     if (property.status === "ok") {
@@ -229,85 +276,53 @@ export async function POST(req: NextRequest) {
 
   const bodyObj = (body ?? {}) as {
     addresses?: unknown;
-    mlsid?: unknown;
-    page?: unknown;
+    coordinates?: unknown;
   };
 
-  // MLS ID single-lookup path
-  const mlsidRaw = bodyObj.mlsid;
-  if (typeof mlsidRaw === "string" && mlsidRaw.trim().length > 0) {
-    if (!hasUsableKey()) return missingKeyResponse();
-    const page =
-      typeof bodyObj.page === "number"
-        ? bodyObj.page
-        : typeof bodyObj.page === "string"
-        ? Number(bodyObj.page)
-        : 1;
-    try {
-      console.log(
-        `[property-lookup POST mlsid] mlsid=${sanitizeForLog(mlsidRaw)} user=${auth.userId}`
-      );
-      const property = await fetchZillowPropertyByMlsId(mlsidRaw.trim(), page);
-      const elapsed = Date.now() - startedAt;
-      console.log(
-        `[property-lookup POST mlsid] done in ${elapsed}ms status=${property.status}`
-      );
-      if (property.status === "ok") {
-        return NextResponse.json({ ok: true, property });
-      }
-      if (property.status === "no_data") {
-        return NextResponse.json({
-          ok: false,
-          status: "no_data",
-          property,
-          error: property.errorMessage ?? "No data found for this MLS ID",
-          errorType: property.errorType ?? "not_found",
-        });
-      }
-      return NextResponse.json({
-        ok: false,
-        status: "error",
-        property,
-        error: property.errorMessage ?? "Data unavailable",
-        errorType: property.errorType ?? "unknown",
-      });
-    } catch (err) {
-      const elapsed = Date.now() - startedAt;
-      const message = err instanceof Error ? err.message : "Lookup failed";
-      console.error(`[property-lookup POST mlsid] threw after ${elapsed}ms:`, message);
-      return NextResponse.json(
-        {
-          ok: false,
-          status: "error",
-          error: message,
-          errorType: "connection_error",
-          message: `MLS lookup failed: ${message}. Retry in a moment.`,
-        },
-        { status: 200 }
-      );
-    }
-  }
-
-  // Address batch-lookup path
-  const raw = bodyObj.addresses;
-  const addresses = Array.isArray(raw)
-    ? (raw as unknown[]).map((v) => String(v))
+  const rawAddresses = Array.isArray(bodyObj.addresses)
+    ? (bodyObj.addresses as unknown[])
+    : [];
+  const rawCoords = Array.isArray(bodyObj.coordinates)
+    ? (bodyObj.coordinates as unknown[])
     : [];
 
-  if (addresses.length === 0) {
+  type Entry = {
+    address: string;
+    latitude: number | undefined;
+    longitude: number | undefined;
+  };
+
+  const entries: Entry[] = rawAddresses.map((v, i) => {
+    const coordItem = rawCoords[i];
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+    if (coordItem && typeof coordItem === "object") {
+      const lat = Number((coordItem as { latitude?: unknown }).latitude);
+      const lng = Number((coordItem as { longitude?: unknown }).longitude);
+      if (Number.isFinite(lat)) latitude = lat;
+      if (Number.isFinite(lng)) longitude = lng;
+    }
+    return {
+      address: String(v ?? "").trim(),
+      latitude,
+      longitude,
+    };
+  });
+
+  if (entries.length === 0 || entries.every((e) => !e.address)) {
     return NextResponse.json(
       {
         ok: false,
         error: "missing_param",
         errorType: "invalid_address",
         message:
-          "Provide a non-empty addresses[] array or an 'mlsid' string in the request body.",
+          "Provide a non-empty addresses[] array with corresponding coordinates[] in the request body.",
       },
       { status: 400 }
     );
   }
 
-  if (addresses.length > 5) {
+  if (entries.length > 5) {
     return NextResponse.json(
       {
         ok: false,
@@ -332,9 +347,36 @@ export async function POST(req: NextRequest) {
 
   try {
     console.log(
-      `[property-lookup POST] batch=${addresses.length} user=${auth.userId} samples=[${addresses.slice(0, 3).map((a) => sanitizeForLog(a, 40)).join(" | ")}${addresses.length > 3 ? " | …" : ""}]`
+      `[property-lookup POST] batch=${entries.length} user=${
+        auth.userId
+      } samples=[${entries
+        .slice(0, 3)
+        .map((a) => sanitizeForLog(a.address, 40))
+        .join(" | ")}${entries.length > 3 ? " | …" : ""}]`
     );
-    const properties = await fetchZillowProperties(addresses);
+
+    const properties = await Promise.all(
+      entries.map(async (item) => {
+        if (
+          item.latitude === undefined ||
+          item.longitude === undefined ||
+          !Number.isFinite(item.latitude) ||
+          !Number.isFinite(item.longitude) ||
+          item.latitude < -90 ||
+          item.latitude > 90 ||
+          item.longitude < -180 ||
+          item.longitude > 180
+        ) {
+          return invalidCoordsProperty(item.address);
+        }
+        return fetchZillowPropertyByCoordinates(
+          item.address,
+          item.latitude,
+          item.longitude
+        );
+      })
+    );
+
     const okCount = properties.filter((p) => p.status === "ok").length;
     const errCount = properties.filter((p) => p.status === "error").length;
     const noDataCount = properties.filter((p) => p.status === "no_data").length;
@@ -346,7 +388,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const elapsed = Date.now() - startedAt;
     const message = err instanceof Error ? err.message : "Lookup failed";
-    console.error(`[property-lookup POST batch] threw after ${elapsed}ms:`, message);
+    console.error(
+      `[property-lookup POST batch] threw after ${elapsed}ms:`,
+      message
+    );
     return NextResponse.json(
       {
         ok: false,
