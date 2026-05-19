@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useState } from "react";
 import {
   LayoutDashboard,
   GitCompare,
@@ -13,9 +14,11 @@ import {
   Building2,
   UserCog,
   UserCircle2,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAgentBranding } from "@/context/AgentBrandingContext";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -37,7 +40,9 @@ const settingsItems = [
 
 function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { branding, initials, isConfigured } = useAgentBranding();
+  const [signingOut, setSigningOut] = useState(false);
 
   const isProfileActive = pathname.startsWith("/profile");
 
@@ -53,6 +58,24 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     }
     return "Realtor®";
   })();
+
+  const handleSignOut = useCallback(async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch {
+      // ignore — still redirect to /login
+    }
+    try {
+      window.localStorage.removeItem("agentdesk:agent-branding:v1");
+    } catch {
+      // ignore
+    }
+    router.replace("/login");
+    router.refresh();
+  }, [router, signingOut]);
 
   return (
     <>
@@ -166,7 +189,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           </ul>
         </nav>
 
-        <div className="relative z-10 border-t border-sidebar-border p-3 shrink-0">
+        <div className="relative z-10 border-t border-sidebar-border p-3 shrink-0 space-y-1">
           <Link
             href="/profile"
             onClick={onClose}
@@ -215,6 +238,17 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               aria-hidden="true"
             />
           </Link>
+
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/60 transition-colors hover:bg-sidebar-foreground/5 hover:text-sidebar-foreground disabled:opacity-50"
+            aria-label="Sign out"
+          >
+            <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
+            <span>{signingOut ? "Signing out…" : "Sign out"}</span>
+          </button>
         </div>
       </aside>
     </>
