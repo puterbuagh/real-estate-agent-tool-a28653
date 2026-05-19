@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { fetchZillowPropertyByCoordinates } from "@/lib/zillow";
+import { fetchPropertyByCoordinates } from "@/lib/zillow";
+import type { ZillowProperty } from "@/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -109,7 +110,11 @@ function sanitizeForLog(input: string | null | undefined, max = 60): string {
   return `${trimmed.slice(0, max)}…`;
 }
 
-function invalidCoordsProperty(address: string) {
+function errorZillowProperty(
+  address: string,
+  errorMessage: string,
+  errorType: ZillowProperty["errorType"]
+): ZillowProperty {
   return {
     zpid: null,
     address,
@@ -127,11 +132,18 @@ function invalidCoordsProperty(address: string) {
     lastSoldDate: null,
     taxAssessedValue: null,
     photo: null,
-    status: "error" as const,
-    errorMessage:
-      "Missing or invalid coordinates. Select this address from the Google Places dropdown to attach latitude/longitude.",
-    errorType: "invalid_address" as const,
+    status: "error",
+    errorMessage,
+    errorType,
   };
+}
+
+function invalidCoordsProperty(address: string): ZillowProperty {
+  return errorZillowProperty(
+    address,
+    "Missing or invalid coordinates. Select this address from the Google Places dropdown to attach latitude/longitude.",
+    "invalid_address"
+  );
 }
 
 export async function GET(req: NextRequest) {
@@ -166,6 +178,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
+        status: "error",
+        property: invalidCoordsProperty(address.trim()),
         error: "missing_coordinates",
         errorType: "invalid_address",
         message:
@@ -189,6 +203,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
+        status: "error",
+        property: invalidCoordsProperty(address.trim()),
         error: "invalid_coordinates",
         errorType: "invalid_address",
         message: "Invalid latitude or longitude values.",
@@ -202,7 +218,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const property = await fetchZillowPropertyByCoordinates(
+    const property = await fetchPropertyByCoordinates(
       address.trim(),
       latitude,
       longitude
@@ -242,6 +258,11 @@ export async function GET(req: NextRequest) {
       {
         ok: false,
         status: "error",
+        property: errorZillowProperty(
+          address?.trim() ?? "",
+          `Lookup failed unexpectedly: ${message}. Retry in a moment — this is usually transient.`,
+          "connection_error"
+        ),
         error: message,
         errorType: "connection_error",
         message: `Lookup failed unexpectedly: ${message}. Retry in a moment — this is usually transient.`,
@@ -369,7 +390,7 @@ export async function POST(req: NextRequest) {
         ) {
           return invalidCoordsProperty(item.address);
         }
-        return fetchZillowPropertyByCoordinates(
+        return fetchPropertyByCoordinates(
           item.address,
           item.latitude,
           item.longitude
