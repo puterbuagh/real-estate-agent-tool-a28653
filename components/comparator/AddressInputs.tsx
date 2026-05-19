@@ -18,16 +18,18 @@ export interface AddressInputsProps {
   modes?: AddressInputMode[];
   onModeChange?: (index: number, mode: AddressInputMode) => void;
   /**
-   * Called when a Google Places suggestion is confirmed. Receives the verified
-   * formatted address plus latitude/longitude. Parent handlers that only care
-   * about the address may ignore the coordinate args — they're optional from
-   * the consumer's POV but always provided by this component.
+   * Called when a Google Places suggestion is confirmed. Latitude and
+   * longitude are OPTIONAL from the consumer's perspective so that existing
+   * call sites which only consume the formatted address continue to compile
+   * unchanged. When a place is selected via Google, this component always
+   * provides both — but the parameters are typed as optional so older
+   * handlers `(idx, addr) => void` remain assignable.
    */
   onPlaceSelected?: (
     index: number,
     formattedAddress: string,
-    latitude: number,
-    longitude: number
+    latitude?: number,
+    longitude?: number
   ) => void;
 }
 
