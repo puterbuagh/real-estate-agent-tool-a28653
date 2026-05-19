@@ -177,9 +177,159 @@ async function fetchWithRetry(
 }
 
 /**
+ * Normalizes an address string for fuzzy matching by removing common noise.
+ */
+function normalizeAddressForMatching(addr: string): string {
+  let normalized = addr.toLowerCase().trim();
+  normalized = normalized.replace(/\b(apt|apartment|unit|suite|#)\s*[a-z0-9-]+\b/gi, "");
+  normalized = normalized.replace(/[^a-z0-9\s]/g, " ");
+
+  const directionals: Record<string, string> = {
+    north: "n", south: "s", east: "e", west: "w",
+    northeast: "ne", northwest: "nw", southeast: "se", southwest: "sw",
+  };
+  for (const [full, abbr] of Object.entries(directionals)) {
+    normalized = normalized.replace(new RegExp(`\\b${full}\\b`, "g"), abbr);
+  }
+
+  const streetTypes: Record<string, string> = {
+    street: "st", avenue: "ave", road: "rd", boulevard: "blvd",
+    drive: "dr", court: "ct", circle: "cir", lane: "ln",
+    place: "pl", terrace: "ter", parkway: "pkwy", highway: "hwy",
+    trail: "trl",
+  };
+  for (const [full, abbr] of Object.entries(streetTypes)) {
+    normalized = normalized.replace(new RegExp(`\\b${full}\\b`, "g"), abbr);
+  }
+
+  normalized = normalized.replace(/\s+/g, " ").trim();
+  return normalized;
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const matrix: number[][] = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+/**
+ * Haversine distance between two lat/lng points, in meters.
+ */
+function haversineMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/**
+ * Scores how well a result address matches the input.
+ * Returns 0..1 where 1 is a perfect match. Higher is better.
+ *
+ * Components:
+ *  - Street number exact match: strong boost
+ *  - Token overlap (Jaccard) on normalized address words
+ *  - Normalized Levenshtein similarity
+ *  - Geographic proximity (decays over ~500m)
+ */
+function scoreAddressMatch(
+  inputAddr: string,
+  resultAddr: string,
+  inputLat: number,
+  inputLng: number,
+  resultLat: number | null,
+  resultLng: number | null
+): number {
+  const normalizedInput = normalizeAddressForMatching(inputAddr);
+  const normalizedResult = normalizeAddressForMatching(resultAddr);
+
+  if (!normalizedInput || !normalizedResult) return 0;
+
+  const inputTokens = normalizedInput.split(" ").filter(Boolean);
+  const resultTokens = normalizedResult.split(" ").filter(Boolean);
+
+  const inputStreetNum = inputTokens.find((t) => /^\d+$/.test(t)) ?? "";
+  const resultStreetNum = resultTokens.find((t) => /^\d+$/.test(t)) ?? "";
+
+  // Street number score: exact match = 1, missing-on-either-side = 0.5, mismatch = 0
+  let streetNumScore = 0.5;
+  if (inputStreetNum && resultStreetNum) {
+    streetNumScore = inputStreetNum === resultStreetNum ? 1 : 0;
+  }
+
+  // Token overlap (Jaccard)
+  const inputSet = new Set(inputTokens);
+  const resultSet = new Set(resultTokens);
+  let intersection = 0;
+  for (const t of inputSet) if (resultSet.has(t)) intersection++;
+  const union = inputSet.size + resultSet.size - intersection;
+  const jaccard = union > 0 ? intersection / union : 0;
+
+  // Normalized Levenshtein similarity
+  const maxLen = Math.max(normalizedInput.length, normalizedResult.length);
+  const lev = levenshteinDistance(normalizedInput, normalizedResult);
+  const levSim = maxLen > 0 ? 1 - lev / maxLen : 0;
+
+  // Geographic proximity
+  let geoSim = 0;
+  if (
+    resultLat !== null &&
+    resultLng !== null &&
+    Number.isFinite(resultLat) &&
+    Number.isFinite(resultLng)
+  ) {
+    const meters = haversineMeters(inputLat, inputLng, resultLat, resultLng);
+    // Decay: 0m → 1.0, 100m → ~0.82, 500m → ~0.37, 1km → ~0.14, 5km → ~0
+    geoSim = Math.exp(-meters / 500);
+  }
+
+  // Weighted blend. Street number is the strongest single signal; token
+  // overlap and geo proximity reinforce; Levenshtein is a tiebreaker.
+  const score =
+    streetNumScore * 0.45 +
+    jaccard * 0.25 +
+    geoSim * 0.2 +
+    levSim * 0.1;
+
+  return score;
+}
+
+/**
  * Finds the best match for an input address among Zillow results.
- * Filters out results with missing coordinates before distance calc to avoid
- * the divide-by-zero / null-coercion bug where toNumber()=>null becomes 0.
+ *
+ * Strategy:
+ *  1. Score every result with a calibrated 0..1 match score.
+ *  2. Prefer candidates whose street number matches the input (when input has one).
+ *  3. If no street-number match exists, fall back to the globally best scorer
+ *     — but only if its score clears a minimum confidence threshold.
  */
 function findBestMatch(
   results: Array<Record<string, unknown>>,
@@ -189,48 +339,75 @@ function findBestMatch(
 ): Record<string, unknown> | null {
   if (!results || results.length === 0) return null;
 
-  const input = inputAddress.toLowerCase().trim();
+  const normalizedInput = normalizeAddressForMatching(inputAddress);
+  const inputTokens = normalizedInput.split(" ").filter(Boolean);
+  const inputStreetNumber = inputTokens.find((t) => /^\d+$/.test(t)) ?? "";
 
-  // First try exact address match (works even without coordinates).
-  const exact = results.find((r) => {
-    const addr = toStringOrNull(r.address);
-    return addr && addr.toLowerCase().trim() === input;
-  });
-  if (exact) return exact;
+  type Scored = {
+    raw: Record<string, unknown>;
+    score: number;
+    streetNumMatch: boolean;
+  };
 
-  // Filter to results with valid numeric coordinates so distance math is real.
-  const withCoords = results.filter((r) => {
+  const scored: Scored[] = results.map((r) => {
+    const addr = toStringOrNull(r.address) ?? "";
     const rLat = toNumber(r.latitude);
     const rLng = toNumber(r.longitude);
-    return rLat !== null && rLng !== null;
+    const score = scoreAddressMatch(inputAddress, addr, lat, lng, rLat, rLng);
+
+    const normalized = normalizeAddressForMatching(addr);
+    const resultStreetNumber =
+      normalized.split(" ").find((t) => /^\d+$/.test(t)) ?? "";
+    const streetNumMatch =
+      Boolean(inputStreetNumber) &&
+      Boolean(resultStreetNumber) &&
+      inputStreetNumber === resultStreetNumber;
+
+    return { raw: r, score, streetNumMatch };
   });
 
-  if (withCoords.length === 0) {
-    // No usable coordinates anywhere — fall back to the first result rather
-    // than returning null (Zillow occasionally omits geo on partial hits).
-    return results[0] ?? null;
+  // Prefer street-number matches first
+  const streetMatches = scored.filter((s) => s.streetNumMatch);
+
+  if (streetMatches.length > 0) {
+    streetMatches.sort((a, b) => b.score - a.score);
+    const winner = streetMatches[0];
+    console.log(
+      `[zillow findBestMatch] street# match for "${inputAddress}": "${toStringOrNull(
+        winner.raw.address
+      )}" score=${winner.score.toFixed(3)} (${streetMatches.length}/${results.length} had matching street #)`
+    );
+    return winner.raw;
   }
 
-  let best = withCoords[0];
-  const bestLat0 = toNumber(best.latitude) as number;
-  const bestLng0 = toNumber(best.longitude) as number;
-  let bestDist = Math.abs(bestLat0 - lat) + Math.abs(bestLng0 - lng);
+  // No street-number match — fall back to global best, but require a minimum
+  // confidence so we don't return a wildly wrong property.
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  const MIN_CONFIDENCE = 0.45;
 
-  for (let i = 1; i < withCoords.length; i++) {
-    const current = withCoords[i];
-    const cLat = toNumber(current.latitude) as number;
-    const cLng = toNumber(current.longitude) as number;
-    const currDist = Math.abs(cLat - lat) + Math.abs(cLng - lng);
-    if (currDist < bestDist) {
-      best = current;
-      bestDist = currDist;
-    }
+  if (!best || best.score < MIN_CONFIDENCE) {
+    console.warn(
+      `[zillow findBestMatch] no confident match for "${inputAddress}". best score=${
+        best?.score.toFixed(3) ?? "n/a"
+      } addr="${toStringOrNull(best?.raw.address ?? null)}" (threshold ${MIN_CONFIDENCE})`
+    );
+    return null;
   }
 
-  return best;
+  console.log(
+    `[zillow findBestMatch] fallback match for "${inputAddress}": "${toStringOrNull(
+      best.raw.address
+    )}" score=${best.score.toFixed(3)} (no street# matches in ${results.length} results)`
+  );
+  return best.raw;
 }
 
-export async function fetchZillowPropertyByCoordinates(
+/**
+ * Primary lookup: takes an address + coordinates, queries Zillow, picks the
+ * best-matching property from the returned list.
+ */
+export async function fetchPropertyByCoordinates(
   address: string,
   latitude: number,
   longitude: number
@@ -340,14 +517,18 @@ export async function fetchZillowPropertyByCoordinates(
       );
     }
 
+    console.log(
+      `[zillow] ${label} → ${results.length} results returned, finding best match...`
+    );
+
     const bestMatch = findBestMatch(results, address, latitude, longitude);
 
     if (!bestMatch) {
-      console.log(`[zillow] ${label} → no match found (${totalElapsed}ms)`);
+      console.log(`[zillow] ${label} → no confident match (${totalElapsed}ms)`);
       return emptyProperty(
         address,
         "no_data",
-        "Could not match this address to a Zillow property. Try verifying the address on zillow.com.",
+        "Zillow returned nearby properties but none matched this address with enough confidence. Try verifying the address on zillow.com or pick a more specific suggestion from the dropdown.",
         "not_found"
       );
     }
@@ -404,6 +585,11 @@ export async function fetchZillowPropertyByCoordinates(
     );
   }
 }
+
+/**
+ * Backwards-compatible alias. Older code may import the longer name.
+ */
+export const fetchZillowPropertyByCoordinates = fetchPropertyByCoordinates;
 
 function toComparisonProperty(p: ZillowProperty): ComparisonProperty {
   return {
