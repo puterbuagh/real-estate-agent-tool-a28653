@@ -6,11 +6,60 @@ import { UserCircle2, Sparkles, Eye, KeyRound, ShieldCheck } from "lucide-react"
 import { Card } from "@/components/ui/Card";
 import ProfileForm from "@/components/profile/ProfileForm";
 import { useAgentBranding } from "@/context/AgentBrandingContext";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export const dynamic = "force-dynamic";
 
 function ProfilePage() {
-  const { branding, initials, isConfigured, hasGoogleKey } = useAgentBranding();
+  const { branding, initials, isConfigured, hasGoogleKey, setBranding } =
+    useAgentBranding() as ReturnType<typeof useAgentBranding> & {
+      hasGoogleKey?: boolean;
+    };
+
+  const [loading, setLoading] = React.useState(true);
+
+  // Pull the latest server-side profile on mount so we don't show stale
+  // localStorage values for a freshly-logged-in user.
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
+        const { data, error } = await supabase
+          .from("agent_profiles")
+          .select("name, email, brokerage, phone, logo_url, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        if (!error && data) {
+          setBranding({
+            name: (data.name as string) ?? "",
+            email: (data.email as string) ?? user.email ?? "",
+            brokerage: (data.brokerage as string) ?? "",
+            phone: (data.phone as string) ?? "",
+            logoUrl: (data.logo_url as string | null) ?? null,
+            avatarUrl: (data.avatar_url as string | null) ?? null,
+          });
+        }
+      } catch {
+        // ignore — fall back to local-storage hydrated values
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const previewName = (branding.name ?? "").trim() || "Your name";
   const previewSub = (() => {
@@ -31,15 +80,25 @@ function ProfilePage() {
           Agent identity, branding &amp; keys
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Set this once. Your name, brokerage, contact info, and personal
-          Google API key are stored locally in your browser and applied
-          everywhere AgentDesk represents you.
+          Set this once. Your name, brokerage, and contact info are synced to
+          your AgentDesk account and applied everywhere AgentDesk represents
+          you — sidebar, top bar, and every client report.
         </p>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Card className="p-6 md:p-8">
-          <ProfileForm />
+          {loading ? (
+            <div className="space-y-4">
+              <div className="h-6 w-40 animate-pulse rounded bg-muted" />
+              <div className="h-10 w-full animate-pulse rounded bg-muted" />
+              <div className="h-10 w-full animate-pulse rounded bg-muted" />
+              <div className="h-10 w-full animate-pulse rounded bg-muted" />
+              <div className="h-10 w-full animate-pulse rounded bg-muted" />
+            </div>
+          ) : (
+            <ProfileForm />
+          )}
         </Card>
 
         <div className="space-y-4">
@@ -90,35 +149,36 @@ function ProfilePage() {
             </div>
           </Card>
 
-          <Card className="p-5">
-            <div className="flex items-start gap-3">
-              <span
-                className={
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-md " +
-                  (hasGoogleKey
-                    ? "bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]"
-                    : "bg-muted text-muted-foreground")
-                }
-              >
-                <KeyRound className="h-4 w-4" aria-hidden="true" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <h3 className="font-display text-sm font-semibold tracking-tight">
-                  Google API key
-                </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {hasGoogleKey
-                    ? "Your key is saved locally and will be used for any Google-powered features (address autocomplete, maps, etc.)."
-                    : "No key set. Add one in the form to unlock address autocomplete and other Google-powered features."}
-                </p>
-                <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                  Stored in this browser only — never transmitted to our
-                  servers.
+          {typeof hasGoogleKey === "boolean" && (
+            <Card className="p-5">
+              <div className="flex items-start gap-3">
+                <span
+                  className={
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-md " +
+                    (hasGoogleKey
+                      ? "bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]"
+                      : "bg-muted text-muted-foreground")
+                  }
+                >
+                  <KeyRound className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-display text-sm font-semibold tracking-tight">
+                    Google API key
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {hasGoogleKey
+                      ? "Your key is saved and will be used for any Google-powered features (address autocomplete, maps, etc.)."
+                      : "No key set. Google Places autocomplete uses the workspace-level key."}
+                  </p>
+                  <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                    Managed at the deployment level.
+                  </div>
                 </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          )}
 
           <Card className="p-6 bg-muted/30">
             <h2 className="font-display text-base font-semibold tracking-tight">
@@ -149,16 +209,9 @@ function ProfilePage() {
                 </Link>{" "}
                 page.
               </li>
-              <li>
-                <span className="font-medium text-foreground">
-                  Google features:
-                </span>{" "}
-                your API key powers address autocomplete and any future
-                map-based tools across AgentDesk.
-              </li>
             </ul>
             <p className="mt-6 text-xs text-muted-foreground">
-              Saved locally to this browser. Sign-in sync is coming later.
+              Synced to your AgentDesk account. Sign out from the sidebar.
             </p>
           </Card>
         </div>
