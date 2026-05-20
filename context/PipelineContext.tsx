@@ -13,7 +13,6 @@ import type {
   PipelineItem,
   PipelineStage,
   Comparison,
-  ComparedProperty,
   ComparisonProperty,
 } from "@/types";
 
@@ -97,6 +96,41 @@ function normalizePipeline(items: PipelineItem[]): PipelineItem[] {
   }));
 }
 
+function normalizeComparisonProperty(
+  p: Partial<ComparisonProperty> & { address?: string }
+): ComparisonProperty {
+  return {
+    zpid: p.zpid ?? null,
+    address: p.address ?? "",
+    price: p.price ?? null,
+    zestimate: p.zestimate ?? null,
+    bedrooms: p.bedrooms ?? null,
+    bathrooms: p.bathrooms ?? null,
+    livingArea: p.livingArea ?? null,
+    lotSize: p.lotSize ?? null,
+    yearBuilt: p.yearBuilt ?? null,
+    propertyType: p.propertyType ?? null,
+    daysOnMarket: p.daysOnMarket ?? null,
+    pricePerSqft: p.pricePerSqft ?? null,
+    lastSoldPrice: p.lastSoldPrice ?? null,
+    lastSoldDate: p.lastSoldDate ?? null,
+    taxAssessedValue: p.taxAssessedValue ?? null,
+    photo: p.photo ?? null,
+  };
+}
+
+function normalizeComparisons(comps: Comparison[]): Comparison[] {
+  if (!Array.isArray(comps)) return [];
+  return comps.map((c) => ({
+    ...c,
+    properties: Array.isArray(c.properties)
+      ? c.properties.map(normalizeComparisonProperty)
+      : [],
+    reportNotes: c.reportNotes ?? {},
+    clientName: c.clientName ?? null,
+  }));
+}
+
 function readLocalStorage(key: string): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -132,7 +166,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
         readLocalStorage(COMPARISONS_KEY),
         []
       );
-      setComparisons(Array.isArray(storedComparisons) ? storedComparisons : []);
+      setComparisons(normalizeComparisons(storedComparisons));
     } catch {
       // ignore
     } finally {
@@ -177,7 +211,10 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
           notes: addressOrInput.notes ?? "",
         };
       }
-      setPipeline((prev) => [item, ...prev]);
+      setPipeline((prev) => {
+        const next = [item, ...prev];
+        return next;
+      });
     },
     []
   );
@@ -204,28 +241,29 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addComparison = useCallback(
-    (properties: ComparisonProperty[], _label?: string): Comparison | null => {
+    (properties: ComparisonProperty[], label?: string): Comparison | null => {
       if (!properties || properties.length === 0) return null;
 
-      const compared: ComparedProperty[] = properties.map((p) => ({
-        address: p.address,
-        zestimate: p.zestimate ?? null,
-      }));
+      const normalized = properties.map(normalizeComparisonProperty);
 
-      const winner = [...properties].sort(
+      const winner = [...normalized].sort(
         (a, b) => (b.zestimate ?? 0) - (a.zestimate ?? 0)
       )[0];
 
       const entry: Comparison = {
         id: generateId(),
         createdAt: new Date().toISOString(),
-        properties: compared,
+        properties: normalized,
         winnerAddress: winner?.address ?? null,
         winnerZestimate: winner?.zestimate ?? null,
         reportNotes: {},
         clientName: null,
+        label: label,
       };
-      setComparisons((prev) => [entry, ...prev]);
+      setComparisons((prev) => {
+        const next = [entry, ...prev];
+        return next;
+      });
       return entry;
     },
     []
