@@ -8,6 +8,7 @@ import {
   Building2,
   Phone,
   Mail,
+  MapPin,
   Image as ImageIcon,
   Save,
   RotateCcw,
@@ -40,6 +41,12 @@ const schema = z.object({
     .email("Enter a valid email")
     .optional()
     .or(z.literal("")),
+  location: z
+    .string()
+    .trim()
+    .max(100, "Location is too long")
+    .optional()
+    .or(z.literal("")),
   logoUrl: z
     .string()
     .max(2_500_000, "Logo too large")
@@ -52,6 +59,7 @@ type FormState = {
   brokerage: string;
   phone: string;
   email: string;
+  location: string;
   logoUrl: string;
 };
 
@@ -61,6 +69,7 @@ function toForm(b: AgentBranding): FormState {
     brokerage: b.brokerage ?? "",
     phone: b.phone ?? "",
     email: b.email ?? "",
+    location: b.location ?? "",
     logoUrl: b.logoUrl ?? "",
   };
 }
@@ -76,6 +85,7 @@ function Field({
   error,
   autoComplete,
   required,
+  helpText,
 }: {
   id: string;
   label: string;
@@ -87,6 +97,7 @@ function Field({
   error?: string;
   autoComplete?: string;
   required?: boolean;
+  helpText?: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -111,6 +122,9 @@ function Field({
           aria-describedby={error ? `${id}-error` : undefined}
         />
       </div>
+      {helpText && !error && (
+        <p className="text-[11px] text-muted-foreground">{helpText}</p>
+      )}
       {error && (
         <p
           id={`${id}-error`}
@@ -189,7 +203,9 @@ function ProfileForm() {
         brokerage: parsed.data.brokerage || "",
         phone: parsed.data.phone || "",
         email: parsed.data.email || "",
+        location: parsed.data.location || "",
         logoUrl: parsed.data.logoUrl || "",
+        avatarUrl: branding.avatarUrl ?? null,
       });
       setErrors({});
       setDirty(false);
@@ -296,6 +312,19 @@ function ProfileForm() {
           autoComplete="email"
           error={errors.email}
         />
+        <div className="sm:col-span-2">
+          <Field
+            id="profile-location"
+            label="Market location (state)"
+            icon={MapPin}
+            value={form.location}
+            onChange={(v) => update("location", v)}
+            placeholder="Florida"
+            autoComplete="address-level1"
+            error={errors.location}
+            helpText="Used to localize mortgage rates and market stats (e.g. Florida, Ohio, Texas)."
+          />
+        </div>
       </div>
 
       <div className="space-y-1.5">
