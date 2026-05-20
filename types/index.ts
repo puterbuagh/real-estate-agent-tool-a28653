@@ -11,6 +11,12 @@ export interface PipelineItem {
   notes?: string;
 }
 
+export interface ZillowDiagnosticDetails {
+  coordinatesUsed?: { lat: number; lng: number };
+  candidatesReturned?: number;
+  bestConfidenceScore?: number;
+}
+
 export interface ZillowProperty {
   zpid: string | null;
   address: string;
@@ -30,7 +36,16 @@ export interface ZillowProperty {
   photo: string | null;
   status: "ok" | "no_data" | "error";
   errorMessage?: string;
-  errorType?: "not_found" | "connection_error" | "rate_limited" | "missing_key" | "unknown";
+  errorType?:
+    | "not_found"
+    | "connection_error"
+    | "rate_limited"
+    | "missing_key"
+    | "invalid_address"
+    | "unauthorized"
+    | "timeout"
+    | "unknown";
+  diagnosticDetails?: ZillowDiagnosticDetails;
 }
 
 export interface ComparisonProperty {
@@ -54,8 +69,8 @@ export interface ComparisonProperty {
 
 export type ComparisonResult =
   | { kind: "success"; address: string; property: ComparisonProperty }
-  | { kind: "empty"; address: string }
-  | { kind: "error"; address: string; message: string };
+  | { kind: "empty"; address: string; diagnosticDetails?: ZillowDiagnosticDetails }
+  | { kind: "error"; address: string; message: string; errorType?: ZillowProperty["errorType"]; diagnosticDetails?: ZillowDiagnosticDetails };
 
 export interface ComparedProperty {
   address: string;
