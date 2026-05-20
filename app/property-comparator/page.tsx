@@ -463,8 +463,12 @@ function PropertyComparatorPage() {
       .filter(Boolean)
       .slice(0, 2)
       .join(" vs ");
-    addComparison(compared, label || undefined);
-    toast.success("Comparison saved to your dashboard.");
+    const saved = addComparison(compared, label || undefined);
+    if (saved) {
+      toast.success("Comparison saved to your dashboard.");
+    } else {
+      toast.error("Failed to save comparison.");
+    }
   }
 
   function handleClear() {
