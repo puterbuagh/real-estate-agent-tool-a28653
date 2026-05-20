@@ -105,76 +105,75 @@ function QuickAddToPipeline() {
           </label>
         </div>
 
-        <div className="grid w-full max-w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_auto]">
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
-            <label
-              htmlFor="qa-address"
-              className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground"
-            >
-              Property address
-            </label>
-            <input
-              id="qa-address"
-              type="text"
-              value={address}
-              onChange={(e) => {
-                setAddress(e.target.value);
-                if (error) setError(null);
-              }}
-              onFocus={() => setFocused("address")}
-              onBlur={() => setFocused(null)}
-              placeholder="123 Main St, Columbus, OH"
-              autoComplete="street-address"
-              className={cn(
-                "h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground",
-                "placeholder:text-muted-foreground/70",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-                "transition-all duration-150",
-                focused === "address" && "shadow-[0_0_0_4px_hsl(var(--primary)/0.08)]",
-                error && "border-destructive focus-visible:ring-destructive"
-              )}
-              aria-invalid={!!error}
-              aria-describedby={error ? "qa-address-error" : undefined}
-            />
+        <div className="flex w-full max-w-full flex-col gap-4">
+          <div className="grid w-full max-w-full grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(120px,200px)]">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <label
+                htmlFor="qa-address"
+                className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground"
+              >
+                Property address
+              </label>
+              <input
+                id="qa-address"
+                type="text"
+                value={address}
+                onChange={(e) => {
+                  setAddress(e.target.value);
+                  if (error) setError(null);
+                }}
+                onFocus={() => setFocused("address")}
+                onBlur={() => setFocused(null)}
+                placeholder="123 Main St, Columbus, OH"
+                autoComplete="street-address"
+                className={cn(
+                  "h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground",
+                  "placeholder:text-muted-foreground/70",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                  "transition-all duration-150",
+                  focused === "address" && "shadow-[0_0_0_4px_hsl(var(--primary)/0.08)]",
+                  error && "border-destructive focus-visible:ring-destructive"
+                )}
+                aria-invalid={!!error}
+                aria-describedby={error ? "qa-address-error" : undefined}
+              />
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <label
+                htmlFor="qa-stage"
+                className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground"
+              >
+                Stage
+              </label>
+              <select
+                id="qa-stage"
+                value={stage}
+                onChange={(e) => setStage(e.target.value as PipelineStage)}
+                onFocus={() => setFocused("stage")}
+                onBlur={() => setFocused(null)}
+                className={cn(
+                  "h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                  "transition-all duration-150",
+                  focused === "stage" && "shadow-[0_0_0_4px_hsl(var(--primary)/0.08)]"
+                )}
+              >
+                {STAGES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <label
-              htmlFor="qa-stage"
-              className="font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground"
-            >
-              Stage
-            </label>
-            <select
-              id="qa-stage"
-              value={stage}
-              onChange={(e) => setStage(e.target.value as PipelineStage)}
-              onFocus={() => setFocused("stage")}
-              onBlur={() => setFocused(null)}
-              className={cn(
-                "h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-                "transition-all duration-150",
-                focused === "stage" && "shadow-[0_0_0_4px_hsl(var(--primary)/0.08)]"
-              )}
-            >
-              {STAGES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="hidden font-display text-[11px] uppercase tracking-[0.14em] font-semibold text-transparent select-none lg:inline">
-              Add
-            </span>
+          <div className="flex min-w-0 items-center justify-end">
             <Button
               type="submit"
               loading={submitting}
               disabled={submitting || address.trim().length < 3}
-              className="h-10 w-full"
+              className="w-full sm:w-auto sm:min-w-[180px]"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add to Pipeline
