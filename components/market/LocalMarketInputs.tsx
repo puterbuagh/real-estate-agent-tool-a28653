@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { cn, formatCurrency, formatNumber, formatDate } from "@/lib/utils";
+import { useAgentBranding } from "@/context/AgentBrandingContext";
 import type { LocalMarketInputsData } from "@/types";
 
 const STORAGE_KEY = "agentdesk:localMarket:v1";
@@ -90,11 +91,14 @@ function loadFromStorage(): LocalMarketInputsData | null {
 }
 
 function LocalMarketInputs() {
+  const { branding } = useAgentBranding();
   const [data, setData] = React.useState<LocalMarketInputsData | null>(null);
   const [editing, setEditing] = React.useState(false);
   const [form, setForm] = React.useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = React.useState<Partial<Record<keyof FormState, string>>>({});
   const [hydrated, setHydrated] = React.useState(false);
+
+  const locationLabel = branding.location || "your market";
 
   React.useEffect(() => {
     const stored = loadFromStorage();
@@ -177,7 +181,7 @@ function LocalMarketInputs() {
         icon: Home,
       },
       {
-        label: "Avg Days on Market",
+        label: `Median DOM (${locationLabel})`,
         value: `${formatNumber(data.avgDaysOnMarket)} days`,
         icon: Clock,
       },
@@ -248,7 +252,7 @@ function LocalMarketInputs() {
     },
     {
       key: "avgDaysOnMarket",
-      label: "Avg days on market",
+      label: `Median days on market (${locationLabel})`,
       placeholder: "28",
       suffix: "days",
     },
