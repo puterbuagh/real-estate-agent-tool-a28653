@@ -76,11 +76,12 @@ export interface PropertyComparison {
 export interface Comparison {
   id: string;
   createdAt: string;
-  properties: ComparedProperty[];
+  properties: ComparisonProperty[];
   winnerAddress: string | null;
   winnerZestimate: number | null;
   reportNotes?: Record<string, string>;
   clientName?: string | null;
+  label?: string;
 }
 
 /**
@@ -96,6 +97,7 @@ export interface AgentBranding {
   phone: string;
   email: string;
   logoUrl?: string | null;
+  location?: string | null;
 }
 
 export interface FredObservation {
