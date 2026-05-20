@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
   const lngParam = req.nextUrl.searchParams.get("longitude");
 
   console.log(
-    `[property-lookup GET] address=${sanitizeForLog(address)} lat=${latParam} lng=${lngParam} user=${auth.userId}`
+    `[property-lookup GET] address="${sanitizeForLog(address)}" lat=${latParam} lng=${lngParam} user=${auth.userId}`
   );
 
   if (!address?.trim()) {
@@ -226,9 +226,9 @@ export async function GET(req: NextRequest) {
 
     const elapsed = Date.now() - startedAt;
     console.log(
-      `[property-lookup GET] done in ${elapsed}ms status=${property.status}${
+      `[property-lookup GET] result in ${elapsed}ms: status=${property.status}${
         property.errorType ? ` (${property.errorType})` : ""
-      }`
+      } zpid=${property.zpid ?? "null"}`
     );
 
     if (property.status === "ok") {
@@ -251,9 +251,8 @@ export async function GET(req: NextRequest) {
       errorType: property.errorType ?? "unknown",
     });
   } catch (err) {
-    const elapsed = Date.now() - startedAt;
     const message = err instanceof Error ? err.message : "Lookup failed";
-    console.error(`[property-lookup GET] threw after ${elapsed}ms:`, message);
+    console.error(`[property-lookup GET] threw: ${message}`, err);
     return NextResponse.json(
       {
         ok: false,
@@ -330,6 +329,10 @@ export async function POST(req: NextRequest) {
     };
   });
 
+  console.log(
+    `[property-lookup POST] batch=${entries.length} user=${auth.userId}`
+  );
+
   if (entries.length === 0 || entries.every((e) => !e.address)) {
     return NextResponse.json(
       {
@@ -367,15 +370,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    console.log(
-      `[property-lookup POST] batch=${entries.length} user=${
-        auth.userId
-      } samples=[${entries
-        .slice(0, 3)
-        .map((a) => sanitizeForLog(a.address, 40))
-        .join(" | ")}${entries.length > 3 ? " | …" : ""}]`
-    );
-
     const properties = await Promise.all(
       entries.map(async (item) => {
         if (
@@ -398,21 +392,15 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    const okCount = properties.filter((p) => p.status === "ok").length;
-    const errCount = properties.filter((p) => p.status === "error").length;
-    const noDataCount = properties.filter((p) => p.status === "no_data").length;
     const elapsed = Date.now() - startedAt;
+    const okCount = properties.filter((p) => p.status === "ok").length;
     console.log(
-      `[property-lookup POST] result in ${elapsed}ms ok=${okCount} no_data=${noDataCount} error=${errCount}`
+      `[property-lookup POST] batch result in ${elapsed}ms: ok=${okCount}/${properties.length}`
     );
     return NextResponse.json({ ok: true, properties });
   } catch (err) {
-    const elapsed = Date.now() - startedAt;
     const message = err instanceof Error ? err.message : "Lookup failed";
-    console.error(
-      `[property-lookup POST batch] threw after ${elapsed}ms:`,
-      message
-    );
+    console.error(`[property-lookup POST batch] threw:`, message, err);
     return NextResponse.json(
       {
         ok: false,
