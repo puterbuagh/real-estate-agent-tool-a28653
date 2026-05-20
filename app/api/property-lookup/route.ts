@@ -217,6 +217,10 @@ export async function GET(req: NextRequest) {
     return missingKeyResponse();
   }
 
+  console.log(
+    `[property-lookup GET] CALLING ZILLOW WITH: address="${sanitizeForLog(address.trim())}" lat=${latitude} lng=${longitude}`
+  );
+
   try {
     const property = await fetchPropertyByCoordinates(
       address.trim(),
@@ -226,9 +230,13 @@ export async function GET(req: NextRequest) {
 
     const elapsed = Date.now() - startedAt;
     console.log(
-      `[property-lookup GET] result in ${elapsed}ms: status=${property.status}${
-        property.errorType ? ` (${property.errorType})` : ""
-      } zpid=${property.zpid ?? "null"}`
+      `[property-lookup GET] ZILLOW RESPONSE STATUS: ${property.status}${property.errorType ? ` (${property.errorType})` : ""}`
+    );
+    console.log(
+      `[property-lookup GET] BEST MATCH RESULT: ${JSON.stringify({ zpid: property.zpid, address: property.address, status: property.status, errorMessage: property.errorMessage }).slice(0, 200)}`
+    );
+    console.log(
+      `[property-lookup GET] result in ${elapsed}ms: status=${property.status}${property.errorType ? ` (${property.errorType})` : ""} zpid=${property.zpid ?? "null"}`
     );
 
     if (property.status === "ok") {
@@ -330,7 +338,7 @@ export async function POST(req: NextRequest) {
   });
 
   console.log(
-    `[property-lookup POST] batch=${entries.length} user=${auth.userId}`
+    `[property-lookup POST] LOOKUP REQUEST: batch=${entries.length} user=${auth.userId} addresses=${JSON.stringify(entries.map((e) => ({ address: sanitizeForLog(e.address, 40), lat: e.latitude, lng: e.longitude })))}`
   );
 
   if (entries.length === 0 || entries.every((e) => !e.address)) {
@@ -371,7 +379,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const properties = await Promise.all(
-      entries.map(async (item) => {
+      entries.map(async (item, idx) => {
         if (
           item.latitude === undefined ||
           item.longitude === undefined ||
@@ -384,11 +392,21 @@ export async function POST(req: NextRequest) {
         ) {
           return invalidCoordsProperty(item.address);
         }
-        return fetchPropertyByCoordinates(
+        console.log(
+          `[property-lookup POST] CALLING ZILLOW WITH [${idx}]: address="${sanitizeForLog(item.address)}" lat=${item.latitude} lng=${item.longitude}`
+        );
+        const result = await fetchPropertyByCoordinates(
           item.address,
           item.latitude,
           item.longitude
         );
+        console.log(
+          `[property-lookup POST] ZILLOW RESPONSE STATUS [${idx}]: ${result.status}${result.errorType ? ` (${result.errorType})` : ""}`
+        );
+        console.log(
+          `[property-lookup POST] BEST MATCH RESULT [${idx}]: ${JSON.stringify({ zpid: result.zpid, address: result.address, status: result.status }).slice(0, 150)}`
+        );
+        return result;
       })
     );
 
