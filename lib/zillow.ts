@@ -404,7 +404,7 @@ export async function fetchPropertyByCoordinates(
     `[zillow fetchPropertyByCoordinates] START: address="${address}" lat=${latitude} lng=${longitude}`
   );
 
-  const url = `${ZILLOW_BYCOORDINATES_URL}?lat=${latitude}&lng=${longitude}&page=1&listType=for-sale`;
+  const url = `${ZILLOW_BYCOORDINATES_URL}?lat=${latitude}&lng=${longitude}&page=1`;
   const label = `bycoordinates "${address}" (${latitude},${longitude})`;
   const start = Date.now();
 
