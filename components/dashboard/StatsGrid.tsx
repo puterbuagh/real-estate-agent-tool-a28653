@@ -124,7 +124,7 @@ function StatsGrid() {
         index={1}
       />
       <StatCard
-        label="Florida 30yr Fixed Rate"
+        label="30-Year Mortgage Rate"
         value={rate.value ? `${rate.value}%` : "—"}
         sublabel={rateSublabel}
         icon={Percent}
