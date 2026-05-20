@@ -20,6 +20,7 @@ const DEFAULT_BRANDING: AgentBranding = {
   brokerage: "",
   phone: "",
   email: "",
+  location: "",
   logoUrl: null,
   avatarUrl: null,
 };
@@ -68,6 +69,7 @@ function readFromStorage(): AgentBranding {
         typeof parsed.brokerage === "string" ? parsed.brokerage : "",
       phone: typeof parsed.phone === "string" ? parsed.phone : "",
       email: typeof parsed.email === "string" ? parsed.email : "",
+      location: typeof parsed.location === "string" ? parsed.location : "",
       logoUrl:
         typeof parsed.logoUrl === "string" && parsed.logoUrl
           ? parsed.logoUrl
@@ -89,6 +91,7 @@ function rowToBranding(row: Record<string, unknown> | null | undefined): AgentBr
     brokerage: typeof row.brokerage === "string" ? row.brokerage : "",
     phone: typeof row.phone === "string" ? row.phone : "",
     email: typeof row.email === "string" ? row.email : "",
+    location: typeof row.location === "string" ? row.location : "",
     logoUrl:
       typeof row.logo_url === "string" && row.logo_url
         ? (row.logo_url as string)
@@ -98,6 +101,27 @@ function rowToBranding(row: Record<string, unknown> | null | undefined): AgentBr
         ? (row.avatar_url as string)
         : null,
   };
+}
+
+async function persistToApi(branding: AgentBranding): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    await fetch("/api/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: branding.name ?? "",
+        brokerage: branding.brokerage ?? "",
+        phone: branding.phone ?? "",
+        email: branding.email ?? "",
+        location: branding.location ?? "",
+        logoUrl: branding.logoUrl ?? "",
+      }),
+      credentials: "include",
+    });
+  } catch {
+    // best-effort; localStorage remains source of truth on failure
+  }
 }
 
 export function AgentBrandingProvider({ children }: { children: ReactNode }) {
@@ -142,7 +166,7 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await supabase!
           .from("agent_profiles")
-          .select("name, email, brokerage, phone, logo_url, avatar_url")
+          .select("name, email, brokerage, phone, location, logo_url, avatar_url")
           .eq("id", userId)
           .maybeSingle();
         if (cancelled) return;
@@ -155,6 +179,7 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
               brokerage: next.brokerage || prev.brokerage,
               phone: next.phone || prev.phone,
               email: next.email || prev.email,
+              location: next.location || prev.location,
               logoUrl: next.logoUrl ?? prev.logoUrl,
               avatarUrl: next.avatarUrl ?? prev.avatarUrl,
             }));
@@ -203,15 +228,24 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateBranding = useCallback((next: Partial<AgentBranding>) => {
-    setBrandingState((prev) => ({ ...prev, ...next }));
+    setBrandingState((prev) => {
+      const merged = { ...prev, ...next };
+      // fire-and-forget API persistence
+      void persistToApi(merged);
+      return merged;
+    });
   }, []);
 
   const setBranding = useCallback((next: AgentBranding) => {
     setBrandingState(next);
+    // fire-and-forget API persistence so location + other fields
+    // round-trip to the server in addition to localStorage.
+    void persistToApi(next);
   }, []);
 
   const resetBranding = useCallback(() => {
     setBrandingState(DEFAULT_BRANDING);
+    void persistToApi(DEFAULT_BRANDING);
   }, []);
 
   const saveBranding = useCallback(async (): Promise<{
@@ -231,6 +265,7 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
       email: branding.email ?? user.email ?? "",
       brokerage: branding.brokerage ?? "",
       phone: branding.phone ?? "",
+      location: branding.location ?? "",
       logo_url: branding.logoUrl,
       avatar_url: branding.avatarUrl,
     };
@@ -240,6 +275,8 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
       .upsert(payload, { onConflict: "id" });
 
     if (error) return { ok: false, error: error.message };
+    // also mirror to API route for any server-side consumers
+    void persistToApi(branding);
     return { ok: true };
   }, [branding]);
 
