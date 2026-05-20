@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Eye, Trash2, GitCompareArrows } from "lucide-react";
+import { ArrowRight, Trash2, GitCompareArrows } from "lucide-react";
 import { usePipeline } from "@/context/PipelineContext";
 import { Button } from "@/components/ui/Button";
 import { toast } from "sonner";
@@ -161,13 +161,6 @@ function RecentComparisons() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-1">
-                        <Link
-                          href={`/property-comparator?id=${c.id}`}
-                          aria-label="View comparison"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <Eye className="h-4 w-4" aria-hidden="true" />
-                        </Link>
                         <Button
                           variant="ghost"
                           size="icon"
