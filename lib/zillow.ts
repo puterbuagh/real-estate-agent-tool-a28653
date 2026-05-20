@@ -1,12 +1,7 @@
-import type { ZillowProperty, ComparisonProperty, ComparisonResult } from "@/types";
+import type { ZillowProperty, ComparisonProperty, ComparisonResult, ZillowDiagnosticDetails } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Zillow Live Data Scraper (RapidAPI)
-// Host: zillow-com-live-data-scraper-api.p.rapidapi.com
-//
-// All calls go through this module (server-only). The browser hits
-// /api/property-lookup, which calls these helpers — RAPIDAPI_KEY is never
-// exposed to the client bundle.
 // ---------------------------------------------------------------------------
 
 const ZILLOW_HOST = "zillow-com-live-data-scraper-api.p.rapidapi.com";
@@ -61,7 +56,8 @@ function emptyProperty(
   address: string,
   status: "no_data" | "error",
   errorMessage?: string,
-  errorType?: ErrorType
+  errorType?: ErrorType,
+  diagnosticDetails?: ZillowDiagnosticDetails
 ): ZillowProperty {
   return {
     zpid: null,
@@ -83,12 +79,14 @@ function emptyProperty(
     status,
     errorMessage,
     errorType: errorType as ZillowProperty["errorType"],
+    diagnosticDetails,
   };
 }
 
 function normalizeProperty(
   raw: Record<string, unknown>,
-  fallbackAddress: string
+  fallbackAddress: string,
+  diagnosticDetails?: ZillowDiagnosticDetails
 ): ZillowProperty {
   const price = toNumber(raw.price);
   const livingArea = toNumber(raw.sqft);
@@ -113,6 +111,7 @@ function normalizeProperty(
     taxAssessedValue: null,
     photo: toStringOrNull(raw.photo_url),
     status: "ok",
+    diagnosticDetails,
   };
 }
 
@@ -176,9 +175,6 @@ async function fetchWithRetry(
     : new Error("Network error after retries");
 }
 
-/**
- * Normalizes an address string for fuzzy matching by removing common noise.
- */
 function normalizeAddressForMatching(addr: string): string {
   let normalized = addr.toLowerCase().trim();
   normalized = normalized.replace(/\b(apt|apartment|unit|suite|#)\s*[a-z0-9-]+\b/gi, "");
@@ -231,9 +227,6 @@ function levenshteinDistance(a: string, b: string): number {
   return matrix[b.length][a.length];
 }
 
-/**
- * Haversine distance between two lat/lng points, in meters.
- */
 function haversineMeters(
   lat1: number,
   lng1: number,
@@ -250,16 +243,6 @@ function haversineMeters(
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/**
- * Scores how well a result address matches the input.
- * Returns 0..1 where 1 is a perfect match. Higher is better.
- *
- * Components:
- *  - Street number exact match: strong boost
- *  - Token overlap (Jaccard) on normalized address words
- *  - Normalized Levenshtein similarity
- *  - Geographic proximity (decays over ~500m)
- */
 function scoreAddressMatch(
   inputAddr: string,
   resultAddr: string,
@@ -279,13 +262,11 @@ function scoreAddressMatch(
   const inputStreetNum = inputTokens.find((t) => /^\d+$/.test(t)) ?? "";
   const resultStreetNum = resultTokens.find((t) => /^\d+$/.test(t)) ?? "";
 
-  // Street number score: exact match = 1, missing-on-either-side = 0.5, mismatch = 0
   let streetNumScore = 0.5;
   if (inputStreetNum && resultStreetNum) {
     streetNumScore = inputStreetNum === resultStreetNum ? 1 : 0;
   }
 
-  // Token overlap (Jaccard)
   const inputSet = new Set(inputTokens);
   const resultSet = new Set(resultTokens);
   let intersection = 0;
@@ -293,12 +274,10 @@ function scoreAddressMatch(
   const union = inputSet.size + resultSet.size - intersection;
   const jaccard = union > 0 ? intersection / union : 0;
 
-  // Normalized Levenshtein similarity
   const maxLen = Math.max(normalizedInput.length, normalizedResult.length);
   const lev = levenshteinDistance(normalizedInput, normalizedResult);
   const levSim = maxLen > 0 ? 1 - lev / maxLen : 0;
 
-  // Geographic proximity
   let geoSim = 0;
   if (
     resultLat !== null &&
@@ -307,12 +286,9 @@ function scoreAddressMatch(
     Number.isFinite(resultLng)
   ) {
     const meters = haversineMeters(inputLat, inputLng, resultLat, resultLng);
-    // Decay: 0m → 1.0, 100m → ~0.82, 500m → ~0.37, 1km → ~0.14, 5km → ~0
     geoSim = Math.exp(-meters / 500);
   }
 
-  // Weighted blend. Street number is the strongest single signal; token
-  // overlap and geo proximity reinforce; Levenshtein is a tiebreaker.
   const score =
     streetNumScore * 0.45 +
     jaccard * 0.25 +
@@ -322,22 +298,20 @@ function scoreAddressMatch(
   return score;
 }
 
-/**
- * Finds the best match for an input address among Zillow results.
- *
- * Strategy:
- *  1. Score every result with a calibrated 0..1 match score.
- *  2. Prefer candidates whose street number matches the input (when input has one).
- *  3. If no street-number match exists, fall back to the globally best scorer
- *     — but only if its score clears a minimum confidence threshold.
- */
 function findBestMatch(
   results: Array<Record<string, unknown>>,
   inputAddress: string,
   lat: number,
   lng: number
-): Record<string, unknown> | null {
-  if (!results || results.length === 0) return null;
+): { match: Record<string, unknown> | null; bestScore: number } {
+  if (!results || results.length === 0) {
+    console.log(`[zillow findBestMatch] no results array provided`);
+    return { match: null, bestScore: 0 };
+  }
+
+  console.log(
+    `[zillow findBestMatch] input="${inputAddress}" at (${lat},${lng}), evaluating ${results.length} candidates`
+  );
 
   const normalizedInput = normalizeAddressForMatching(inputAddress);
   const inputTokens = normalizedInput.split(" ").filter(Boolean);
@@ -349,7 +323,7 @@ function findBestMatch(
     streetNumMatch: boolean;
   };
 
-  const scored: Scored[] = results.map((r) => {
+  const scored: Scored[] = results.map((r, idx) => {
     const addr = toStringOrNull(r.address) ?? "";
     const rLat = toNumber(r.latitude);
     const rLng = toNumber(r.longitude);
@@ -363,50 +337,38 @@ function findBestMatch(
       Boolean(resultStreetNumber) &&
       inputStreetNumber === resultStreetNumber;
 
+    console.log(
+      `[zillow findBestMatch] candidate[${idx}] addr="${addr}" score=${score.toFixed(3)} streetMatch=${streetNumMatch}`
+    );
+
     return { raw: r, score, streetNumMatch };
   });
 
-  // Prefer street-number matches first
   const streetMatches = scored.filter((s) => s.streetNumMatch);
 
   if (streetMatches.length > 0) {
     streetMatches.sort((a, b) => b.score - a.score);
     const winner = streetMatches[0];
     console.log(
-      `[zillow findBestMatch] street# match for "${inputAddress}": "${toStringOrNull(
-        winner.raw.address
-      )}" score=${winner.score.toFixed(3)} (${streetMatches.length}/${results.length} had matching street #)`
+      `[zillow findBestMatch] WINNER via street# match: score=${winner.score.toFixed(3)}`
     );
-    return winner.raw;
+    return { match: winner.raw, bestScore: winner.score };
   }
 
-  // No street-number match — fall back to global best, but require a minimum
-  // confidence so we don't return a wildly wrong property.
   scored.sort((a, b) => b.score - a.score);
   const best = scored[0];
   const MIN_CONFIDENCE = 0.45;
 
   if (!best || best.score < MIN_CONFIDENCE) {
     console.warn(
-      `[zillow findBestMatch] no confident match for "${inputAddress}". best score=${
-        best?.score.toFixed(3) ?? "n/a"
-      } addr="${toStringOrNull(best?.raw.address ?? null)}" (threshold ${MIN_CONFIDENCE})`
+      `[zillow findBestMatch] NO CONFIDENT MATCH. best score=${best?.score.toFixed(3) ?? "n/a"}`
     );
-    return null;
+    return { match: null, bestScore: best?.score ?? 0 };
   }
 
-  console.log(
-    `[zillow findBestMatch] fallback match for "${inputAddress}": "${toStringOrNull(
-      best.raw.address
-    )}" score=${best.score.toFixed(3)} (no street# matches in ${results.length} results)`
-  );
-  return best.raw;
+  return { match: best.raw, bestScore: best.score };
 }
 
-/**
- * Primary lookup: takes an address + coordinates, queries Zillow, picks the
- * best-matching property from the returned list.
- */
 export async function fetchPropertyByCoordinates(
   address: string,
   latitude: number,
@@ -414,13 +376,17 @@ export async function fetchPropertyByCoordinates(
 ): Promise<ZillowProperty> {
   const apiKey = hasUsableServerKey();
 
+  const baseDiagnostics: ZillowDiagnosticDetails = {
+    coordinatesUsed: { lat: latitude, lng: longitude },
+  };
+
   if (!apiKey) {
-    console.warn("[zillow] RAPIDAPI_KEY missing or placeholder");
     return emptyProperty(
       address,
       "error",
       "Property lookup unavailable — RAPIDAPI_KEY is not configured on the server. Add it in Vercel → Project Settings → Environment Variables, then redeploy.",
-      "missing_key"
+      "missing_key",
+      baseDiagnostics
     );
   }
 
@@ -429,16 +395,20 @@ export async function fetchPropertyByCoordinates(
       address,
       "no_data",
       "Invalid coordinates provided.",
-      "invalid_address"
+      "invalid_address",
+      baseDiagnostics
     );
   }
+
+  console.log(
+    `[zillow fetchPropertyByCoordinates] START: address="${address}" lat=${latitude} lng=${longitude}`
+  );
 
   const url = `${ZILLOW_BYCOORDINATES_URL}?lat=${latitude}&lng=${longitude}&page=1&listType=for-sale`;
   const label = `bycoordinates "${address}" (${latitude},${longitude})`;
   const start = Date.now();
 
   try {
-    console.log(`[zillow] ${label} → ${ZILLOW_HOST}`);
     const res = await fetchWithRetry(
       url,
       { method: "GET", headers: rapidApiHeaders(apiKey), cache: "no-store" },
@@ -446,24 +416,29 @@ export async function fetchPropertyByCoordinates(
     );
     const totalElapsed = Date.now() - start;
 
+    console.log(
+      `[zillow fetchPropertyByCoordinates] RapidAPI response: status=${res.status} elapsed=${totalElapsed}ms`
+    );
+
     if (!res.ok) {
       let bodySnippet = "";
       try {
         const text = await res.text();
         bodySnippet = text.slice(0, 200);
+        console.warn(
+          `[zillow fetchPropertyByCoordinates] HTTP ${res.status} body snippet: ${bodySnippet}`
+        );
       } catch {
         /* ignore */
       }
-      console.warn(
-        `[zillow] ${label} → HTTP ${res.status} after ${totalElapsed}ms ${bodySnippet}`
-      );
 
       if (res.status === 404) {
         return emptyProperty(
           address,
           "no_data",
           "Zillow has no record of this property. Try a different address or verify the property exists on zillow.com.",
-          "not_found"
+          "not_found",
+          baseDiagnostics
         );
       }
       if (res.status === 401 || res.status === 403) {
@@ -471,7 +446,8 @@ export async function fetchPropertyByCoordinates(
           address,
           "error",
           "RapidAPI rejected the request (401/403). Verify your RAPIDAPI_KEY is active and that your account is subscribed to the 'Zillow.com Live Data Scraper' host.",
-          "unauthorized"
+          "unauthorized",
+          baseDiagnostics
         );
       }
       if (res.status === 429) {
@@ -479,26 +455,28 @@ export async function fetchPropertyByCoordinates(
           address,
           "error",
           "RapidAPI rate limit hit (429). Wait a moment and retry, or upgrade your RapidAPI subscription tier.",
-          "rate_limited"
+          "rate_limited",
+          baseDiagnostics
         );
       }
       return emptyProperty(
         address,
         "error",
         `Zillow upstream returned HTTP ${res.status}. This is usually a temporary RapidAPI/Zillow outage — try again in a minute.`,
-        "connection_error"
+        "connection_error",
+        baseDiagnostics
       );
     }
 
     const payload = (await res.json().catch(() => null)) as unknown;
 
     if (!payload || typeof payload !== "object") {
-      console.log(`[zillow] ${label} → invalid response (${totalElapsed}ms)`);
       return emptyProperty(
         address,
         "error",
         "Invalid response from Zillow API.",
-        "unknown"
+        "unknown",
+        baseDiagnostics
       );
     }
 
@@ -507,41 +485,58 @@ export async function fetchPropertyByCoordinates(
       ? (payloadObj.results as Array<Record<string, unknown>>)
       : [];
 
+    const diagnosticsWithCount: ZillowDiagnosticDetails = {
+      ...baseDiagnostics,
+      candidatesReturned: results.length,
+    };
+
+    console.log(
+      `[zillow fetchPropertyByCoordinates] RapidAPI returned ${results.length} results`
+    );
+
     if (results.length === 0) {
-      console.log(`[zillow] ${label} → no results (${totalElapsed}ms)`);
       return emptyProperty(
         address,
         "no_data",
         "No properties found near these coordinates. The property may not be listed on Zillow or the coordinates may be incorrect.",
-        "not_found"
+        "not_found",
+        diagnosticsWithCount
       );
     }
 
-    console.log(
-      `[zillow] ${label} → ${results.length} results returned, finding best match...`
+    const { match: bestMatch, bestScore } = findBestMatch(
+      results,
+      address,
+      latitude,
+      longitude
     );
 
-    const bestMatch = findBestMatch(results, address, latitude, longitude);
+    const fullDiagnostics: ZillowDiagnosticDetails = {
+      ...diagnosticsWithCount,
+      bestConfidenceScore: bestScore,
+    };
 
     if (!bestMatch) {
-      console.log(`[zillow] ${label} → no confident match (${totalElapsed}ms)`);
       return emptyProperty(
         address,
         "no_data",
         "Zillow returned nearby properties but none matched this address with enough confidence. Try verifying the address on zillow.com or pick a more specific suggestion from the dropdown.",
-        "not_found"
+        "not_found",
+        fullDiagnostics
       );
     }
 
-    console.log(`[zillow] ${label} → ok (${totalElapsed}ms)`);
-    return normalizeProperty(bestMatch, address);
+    const normalized = normalizeProperty(bestMatch, address, fullDiagnostics);
+    console.log(
+      `[zillow fetchPropertyByCoordinates] SUCCESS: zpid=${normalized.zpid} (${totalElapsed}ms)`
+    );
+    return normalized;
   } catch (err) {
-    const totalElapsed = Date.now() - start;
     const message = err instanceof Error ? err.message : "Network error";
     const isAbort = err instanceof Error && err.name === "AbortError";
-    const errName = err instanceof Error ? err.name : "Error";
     console.error(
-      `[zillow] ${label} failed after ${totalElapsed}ms (${errName}): ${message}`
+      `[zillow fetchPropertyByCoordinates] EXCEPTION: ${message}`,
+      err
     );
 
     const lowered = message.toLowerCase();
@@ -557,15 +552,17 @@ export async function fetchPropertyByCoordinates(
         address,
         "error",
         "Zillow took too long to respond (30s timeout). The RapidAPI host may be slow or cold-starting — retry in a moment.",
-        "timeout"
+        "timeout",
+        baseDiagnostics
       );
     }
     if (isDns) {
       return emptyProperty(
         address,
         "error",
-        "Couldn't resolve the RapidAPI host. This usually means the Zillow scraper host name changed or your network can't reach RapidAPI. Verify the host on your RapidAPI dashboard.",
-        "connection_error"
+        "Couldn't resolve the RapidAPI host. This usually means the Zillow scraper host name changed or your network can't reach RapidAPI.",
+        "connection_error",
+        baseDiagnostics
       );
     }
     if (isReset) {
@@ -573,7 +570,8 @@ export async function fetchPropertyByCoordinates(
         address,
         "error",
         "RapidAPI dropped the connection. This is usually transient — retry the lookup.",
-        "connection_error"
+        "connection_error",
+        baseDiagnostics
       );
     }
 
@@ -581,14 +579,12 @@ export async function fetchPropertyByCoordinates(
       address,
       "error",
       `Couldn't reach Zillow: ${message}. Verify the server has network access and that your RapidAPI subscription is active.`,
-      "connection_error"
+      "connection_error",
+      baseDiagnostics
     );
   }
 }
 
-/**
- * Backwards-compatible alias. Older code may import the longer name.
- */
 export const fetchZillowPropertyByCoordinates = fetchPropertyByCoordinates;
 
 function toComparisonProperty(p: ZillowProperty): ComparisonProperty {
@@ -612,10 +608,6 @@ function toComparisonProperty(p: ZillowProperty): ComparisonProperty {
   };
 }
 
-/**
- * Client-side helper: looks up a single property via our server proxy route,
- * keeping the RapidAPI key off the browser.
- */
 export async function fetchPropertyByAddress(
   address: string,
   latitude?: number,
@@ -675,6 +667,7 @@ export async function fetchPropertyByAddress(
         message:
           data.message ??
           "Property lookup unavailable — connect a RapidAPI key to enable Zillow data.",
+        errorType: "missing_key",
       };
     }
 
@@ -688,11 +681,17 @@ export async function fetchPropertyByAddress(
           property?.errorMessage ??
           data.error ??
           "Data unavailable — check your connection",
+        errorType: property?.errorType,
+        diagnosticDetails: property?.diagnosticDetails,
       };
     }
 
     if (property.status === "no_data") {
-      return { kind: "empty", address: trimmed };
+      return {
+        kind: "empty",
+        address: trimmed,
+        diagnosticDetails: property.diagnosticDetails,
+      };
     }
 
     return {
@@ -709,10 +708,6 @@ export async function fetchPropertyByAddress(
   }
 }
 
-/**
- * Parallel lookup for the comparator. Uses Promise.allSettled so one failure
- * never breaks the rest of the cards.
- */
 export async function fetchPropertiesByAddress(
   addressesWithCoords: Array<{
     address: string;
