@@ -34,6 +34,12 @@ interface PropertyErrorCardProps {
   onRetry?: () => void;
   /** Number of retry attempts already made — drives exponential backoff cooldown. */
   retryAttempt?: number;
+  /** Diagnostic details from the lookup flow — displayed in dev/debugging. */
+  diagnosticDetails?: {
+    coordinatesUsed?: { lat: number; lng: number };
+    candidatesReturned?: number;
+    bestConfidenceScore?: number;
+  };
 }
 
 interface VariantPresentation {
@@ -250,6 +256,7 @@ function PropertyErrorCard({
   errorType,
   onRetry,
   retryAttempt = 0,
+  diagnosticDetails,
 }: PropertyErrorCardProps) {
   const pres = getPresentation(variant, errorType);
   const { Icon } = pres;
@@ -275,6 +282,12 @@ function PropertyErrorCard({
     : "https://www.zillow.com";
 
   const canRetry = Boolean(onRetry) && pres.retryable !== false && cooldown === 0;
+
+  const hasDiagnostics =
+    diagnosticDetails &&
+    (diagnosticDetails.coordinatesUsed ||
+      diagnosticDetails.candidatesReturned !== undefined ||
+      diagnosticDetails.bestConfidenceScore !== undefined);
 
   return (
     <div
@@ -306,6 +319,33 @@ function PropertyErrorCard({
         </div>
 
         <p className="text-sm text-muted-foreground leading-relaxed">{shownMessage}</p>
+
+        {hasDiagnostics && (
+          <div className="rounded-md border border-border bg-muted/20 p-3 space-y-1">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              Lookup diagnostics
+            </p>
+            {diagnosticDetails?.coordinatesUsed && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Coordinates:</span>{" "}
+                {diagnosticDetails.coordinatesUsed.lat.toFixed(6)},{" "}
+                {diagnosticDetails.coordinatesUsed.lng.toFixed(6)}
+              </p>
+            )}
+            {diagnosticDetails?.candidatesReturned !== undefined && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Candidates returned:</span>{" "}
+                {diagnosticDetails.candidatesReturned}
+              </p>
+            )}
+            {diagnosticDetails?.bestConfidenceScore !== undefined && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Best confidence score:</span>{" "}
+                {(diagnosticDetails.bestConfidenceScore * 100).toFixed(1)}% (threshold: 45%)
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="rounded-md border border-border bg-muted/40 p-3">
           <p className="text-[11px] uppercase tracking-wider text-foreground font-semibold flex items-center gap-1.5">
