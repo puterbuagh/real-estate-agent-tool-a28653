@@ -310,6 +310,9 @@ function findBestMatch(
   }
 
   console.log(
+    `[zillow findBestMatch] CANDIDATES COUNT: ${results.length}`
+  );
+  console.log(
     `[zillow findBestMatch] input="${inputAddress}" at (${lat},${lng}), evaluating ${results.length} candidates`
   );
 
@@ -350,6 +353,12 @@ function findBestMatch(
     streetMatches.sort((a, b) => b.score - a.score);
     const winner = streetMatches[0];
     console.log(
+      `[zillow findBestMatch] BEST MATCH CONFIDENCE: ${winner.score.toFixed(3)}`
+    );
+    console.log(
+      `[zillow findBestMatch] BEST MATCH ADDRESS: ${toStringOrNull(winner.raw.address) ?? "(none)"}`
+    );
+    console.log(
       `[zillow findBestMatch] WINNER via street# match: score=${winner.score.toFixed(3)}`
     );
     return { match: winner.raw, bestScore: winner.score };
@@ -360,11 +369,24 @@ function findBestMatch(
   const MIN_CONFIDENCE = 0.45;
 
   if (!best || best.score < MIN_CONFIDENCE) {
+    console.log(
+      `[zillow findBestMatch] BEST MATCH CONFIDENCE: ${best?.score.toFixed(3) ?? "n/a"}`
+    );
+    console.log(
+      `[zillow findBestMatch] BEST MATCH ADDRESS: (no confident match)`
+    );
     console.warn(
       `[zillow findBestMatch] NO CONFIDENT MATCH. best score=${best?.score.toFixed(3) ?? "n/a"}`
     );
     return { match: null, bestScore: best?.score ?? 0 };
   }
+
+  console.log(
+    `[zillow findBestMatch] BEST MATCH CONFIDENCE: ${best.score.toFixed(3)}`
+  );
+  console.log(
+    `[zillow findBestMatch] BEST MATCH ADDRESS: ${toStringOrNull(best.raw.address) ?? "(none)"}`
+  );
 
   return { match: best.raw, bestScore: best.score };
 }
@@ -379,6 +401,10 @@ export async function fetchPropertyByCoordinates(
   const baseDiagnostics: ZillowDiagnosticDetails = {
     coordinatesUsed: { lat: latitude, lng: longitude },
   };
+
+  console.log(
+    `[zillow fetchPropertyByCoordinates] RAPIDAPI KEY EXISTS: ${!!apiKey}`
+  );
 
   if (!apiKey) {
     return emptyProperty(
@@ -405,6 +431,10 @@ export async function fetchPropertyByCoordinates(
   );
 
   const url = `${ZILLOW_BYCOORDINATES_URL}?lat=${latitude}&lng=${longitude}&page=1`;
+  console.log(
+    `[zillow fetchPropertyByCoordinates] RAPIDAPI URL: ${url}`
+  );
+
   const label = `bycoordinates "${address}" (${latitude},${longitude})`;
   const start = Date.now();
 
@@ -469,6 +499,9 @@ export async function fetchPropertyByCoordinates(
     }
 
     const payload = (await res.json().catch(() => null)) as unknown;
+    console.log(
+      `[zillow fetchPropertyByCoordinates] ZILLOW RAW RESPONSE: ${JSON.stringify(payload).slice(0, 500)}`
+    );
 
     if (!payload || typeof payload !== "object") {
       return emptyProperty(
