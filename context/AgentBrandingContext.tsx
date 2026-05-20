@@ -86,8 +86,16 @@ function readFromStorage(): AgentBranding {
 
 function rowToBranding(row: Record<string, unknown> | null | undefined): AgentBranding | null {
   if (!row) return null;
+  // Database column is `full_name`; map it to our in-app `name` field.
+  // Tolerate either column name in case of legacy rows.
+  const fullName =
+    typeof row.full_name === "string"
+      ? (row.full_name as string)
+      : typeof row.name === "string"
+      ? (row.name as string)
+      : "";
   return {
-    name: typeof row.name === "string" ? row.name : "",
+    name: fullName,
     brokerage: typeof row.brokerage === "string" ? row.brokerage : "",
     phone: typeof row.phone === "string" ? row.phone : "",
     email: typeof row.email === "string" ? row.email : "",
@@ -166,7 +174,7 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await supabase!
           .from("agent_profiles")
-          .select("name, email, brokerage, phone, location, logo_url, avatar_url")
+          .select("full_name, email, brokerage, phone, location, logo_url")
           .eq("id", userId)
           .maybeSingle();
         if (cancelled) return;
@@ -261,13 +269,12 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
 
     const payload = {
       id: user.id,
-      name: branding.name ?? "",
+      full_name: branding.name ?? "",
       email: branding.email ?? user.email ?? "",
       brokerage: branding.brokerage ?? "",
       phone: branding.phone ?? "",
       location: branding.location ?? "",
       logo_url: branding.logoUrl,
-      avatar_url: branding.avatarUrl,
     };
 
     const { error } = await supabase
