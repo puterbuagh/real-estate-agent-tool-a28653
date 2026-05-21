@@ -21,6 +21,7 @@ type ErrorType =
   | "rate_limited"
   | "missing_key"
   | "invalid_address"
+  | "validation"
   | "unauthorized"
   | "timeout"
   | "unknown";
@@ -58,18 +59,30 @@ function getPresentation(
   variant: ErrorVariant,
   errorType: ErrorType | undefined
 ): VariantPresentation {
-  if (variant === "no_data" || errorType === "not_found" || errorType === "invalid_address") {
+  if (
+    variant === "no_data" ||
+    errorType === "not_found" ||
+    errorType === "invalid_address" ||
+    errorType === "validation"
+  ) {
+    const isValidationOrInvalid =
+      errorType === "invalid_address" || errorType === "validation";
     return {
       Icon: Search,
       borderClass: "border-[hsl(38_92%_50%/0.4)]",
       headerClass: "bg-[hsl(38_92%_50%/0.12)] text-[hsl(35_85%_35%)]",
-      headerLabel:
-        errorType === "invalid_address" ? "Address looks incomplete" : "No data found",
-      defaultMessage:
-        errorType === "invalid_address"
-          ? "That doesn't look like a complete address. Include a street number, street name, city, state, and ZIP."
-          : "Zillow has no record for this address.",
+      headerLabel: isValidationOrInvalid
+        ? "Please refine the address"
+        : "No data found",
+      defaultMessage: isValidationOrInvalid
+        ? "Please refine the address by selecting it from the Google Places dropdown. Manually typed addresses need coordinates to look up property data."
+        : "Zillow has no record for this address.",
       tips: [
+        {
+          label: "Select from the dropdown",
+          detail:
+            "Start typing the address, then click a suggestion from the Google Places dropdown. This attaches the latitude/longitude needed for the lookup.",
+        },
         {
           label: "Use the full USPS form",
           detail:
@@ -84,11 +97,6 @@ function getPresentation(
           label: "Verify on zillow.com first",
           detail:
             "If Zillow's own search can't find it, the API won't either — new construction and off-market homes may not be indexed.",
-        },
-        {
-          label: "Or look it up by MLS ID",
-          detail:
-            "If you have the listing's MLS number, use the MLS ID lookup instead — it bypasses address parsing entirely.",
         },
       ],
       showZillowLink: true,
