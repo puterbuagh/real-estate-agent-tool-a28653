@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { fetchPropertyByCoordinates } from "@/lib/zillow";
+import { fetchPropertyByAddress } from "@/lib/attom";
 import type { ZillowProperty } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -81,7 +81,7 @@ function enforceRateLimit(userId: string): NextResponse | null {
 }
 
 function hasUsableKey(): boolean {
-  const key = process.env.RAPIDAPI_KEY;
+  const key = process.env.ATTOM_API_KEY;
   if (!key) return false;
   const trimmed = key.trim();
   if (!trimmed) return false;
@@ -91,15 +91,42 @@ function hasUsableKey(): boolean {
   return true;
 }
 
-function missingKeyResponse() {
-  console.warn("[property-lookup] RAPIDAPI_KEY missing or placeholder");
+const MISSING_KEY_MESSAGE =
+  "Property lookup unavailable — ATTOM_API_KEY is not configured on the server. Add it in Vercel → Project Settings → Environment Variables and redeploy. See .env.example for setup steps.";
+
+function missingKeyProperty(address: string): ZillowProperty {
+  return {
+    zpid: null,
+    address,
+    price: null,
+    zestimate: null,
+    bedrooms: null,
+    bathrooms: null,
+    livingArea: null,
+    lotSize: null,
+    yearBuilt: null,
+    propertyType: null,
+    daysOnMarket: null,
+    pricePerSqft: null,
+    lastSoldPrice: null,
+    lastSoldDate: null,
+    taxAssessedValue: null,
+    photo: null,
+    status: "error",
+    errorMessage: MISSING_KEY_MESSAGE,
+    errorType: "missing_key",
+  };
+}
+
+function missingKeyResponse(address: string) {
+  console.warn("[property-lookup] ATTOM_API_KEY missing or placeholder");
   return NextResponse.json({
     ok: false,
     status: "error",
+    property: missingKeyProperty(address),
     error: "missing_key",
     errorType: "missing_key",
-    message:
-      "Property lookup unavailable — RAPIDAPI_KEY is not configured on the server. Add it in Vercel → Project Settings → Environment Variables and redeploy. See .env.example for setup steps.",
+    message: MISSING_KEY_MESSAGE,
   });
 }
 
@@ -138,11 +165,19 @@ function errorZillowProperty(
   };
 }
 
+function missingCoordsProperty(address: string): ZillowProperty {
+  return errorZillowProperty(
+    address,
+    "No coordinates attached to this address. Please select an address from the Google Places dropdown — manually typed addresses cannot be geocoded server-side.",
+    "not_found"
+  );
+}
+
 function invalidCoordsProperty(address: string): ZillowProperty {
   return errorZillowProperty(
     address,
-    "Missing or invalid coordinates. Select this address from the Google Places dropdown to attach latitude/longitude.",
-    "invalid_address"
+    "Invalid latitude/longitude values. Please refine the address by selecting it from the Google Places dropdown.",
+    "not_found"
   );
 }
 
@@ -179,11 +214,11 @@ export async function GET(req: NextRequest) {
       {
         ok: false,
         status: "error",
-        property: invalidCoordsProperty(address.trim()),
+        property: missingCoordsProperty(address.trim()),
         error: "missing_coordinates",
-        errorType: "invalid_address",
+        errorType: "not_found",
         message:
-          "Latitude and longitude are required. Please select an address from the Google Places dropdown.",
+          "Latitude and longitude are required. Please refine the address by selecting it from the Google Places dropdown.",
       },
       { status: 400 }
     );
@@ -206,23 +241,24 @@ export async function GET(req: NextRequest) {
         status: "error",
         property: invalidCoordsProperty(address.trim()),
         error: "invalid_coordinates",
-        errorType: "invalid_address",
-        message: "Invalid latitude or longitude values.",
+        errorType: "not_found",
+        message:
+          "Invalid latitude or longitude values. Please refine the address by selecting it from the Google Places dropdown.",
       },
       { status: 400 }
     );
   }
 
   if (!hasUsableKey()) {
-    return missingKeyResponse();
+    return missingKeyResponse(address.trim());
   }
 
   console.log(
-    `[property-lookup GET] CALLING ZILLOW WITH: address="${sanitizeForLog(address.trim())}" lat=${latitude} lng=${longitude}`
+    `[property-lookup GET] CALLING ATTOM WITH: address="${sanitizeForLog(address.trim())}" lat=${latitude} lng=${longitude}`
   );
 
   try {
-    const property = await fetchPropertyByCoordinates(
+    const property = await fetchPropertyByAddress(
       address.trim(),
       latitude,
       longitude
@@ -230,10 +266,10 @@ export async function GET(req: NextRequest) {
 
     const elapsed = Date.now() - startedAt;
     console.log(
-      `[property-lookup GET] ZILLOW RESPONSE STATUS: ${property.status}${property.errorType ? ` (${property.errorType})` : ""}`
+      `[property-lookup GET] ATTOM RESPONSE STATUS: ${property.status}${property.errorType ? ` (${property.errorType})` : ""}`
     );
     console.log(
-      `[property-lookup GET] BEST MATCH RESULT: ${JSON.stringify({ zpid: property.zpid, address: property.address, status: property.status, errorMessage: property.errorMessage }).slice(0, 200)}`
+      `[property-lookup GET] RESULT: ${JSON.stringify({ zpid: property.zpid, address: property.address, status: property.status, errorMessage: property.errorMessage }).slice(0, 200)}`
     );
     console.log(
       `[property-lookup GET] result in ${elapsed}ms: status=${property.status}${property.errorType ? ` (${property.errorType})` : ""} zpid=${property.zpid ?? "null"}`
@@ -367,13 +403,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (!hasUsableKey()) {
+    console.warn("[property-lookup POST] ATTOM_API_KEY missing or placeholder");
     return NextResponse.json({
       ok: false,
+      status: "error",
       error: "missing_key",
       errorType: "missing_key",
-      message:
-        "Property lookup unavailable — RAPIDAPI_KEY is not configured on the server. Add it in Vercel → Project Settings → Environment Variables, then redeploy.",
-      properties: [],
+      message: MISSING_KEY_MESSAGE,
+      properties: entries.map((e) => missingKeyProperty(e.address)),
     });
   }
 
@@ -382,7 +419,14 @@ export async function POST(req: NextRequest) {
       entries.map(async (item, idx) => {
         if (
           item.latitude === undefined ||
-          item.longitude === undefined ||
+          item.longitude === undefined
+        ) {
+          console.log(
+            `[property-lookup POST] MISSING COORDS [${idx}]: address="${sanitizeForLog(item.address)}" — returning not_found`
+          );
+          return missingCoordsProperty(item.address);
+        }
+        if (
           !Number.isFinite(item.latitude) ||
           !Number.isFinite(item.longitude) ||
           item.latitude < -90 ||
@@ -390,21 +434,24 @@ export async function POST(req: NextRequest) {
           item.longitude < -180 ||
           item.longitude > 180
         ) {
+          console.log(
+            `[property-lookup POST] INVALID COORDS [${idx}]: address="${sanitizeForLog(item.address)}" lat=${item.latitude} lng=${item.longitude}`
+          );
           return invalidCoordsProperty(item.address);
         }
         console.log(
-          `[property-lookup POST] CALLING ZILLOW WITH [${idx}]: address="${sanitizeForLog(item.address)}" lat=${item.latitude} lng=${item.longitude}`
+          `[property-lookup POST] CALLING ATTOM WITH [${idx}]: address="${sanitizeForLog(item.address)}" lat=${item.latitude} lng=${item.longitude}`
         );
-        const result = await fetchPropertyByCoordinates(
+        const result = await fetchPropertyByAddress(
           item.address,
           item.latitude,
           item.longitude
         );
         console.log(
-          `[property-lookup POST] ZILLOW RESPONSE STATUS [${idx}]: ${result.status}${result.errorType ? ` (${result.errorType})` : ""}`
+          `[property-lookup POST] ATTOM RESPONSE STATUS [${idx}]: ${result.status}${result.errorType ? ` (${result.errorType})` : ""}`
         );
         console.log(
-          `[property-lookup POST] BEST MATCH RESULT [${idx}]: ${JSON.stringify({ zpid: result.zpid, address: result.address, status: result.status }).slice(0, 150)}`
+          `[property-lookup POST] RESULT [${idx}]: ${JSON.stringify({ zpid: result.zpid, address: result.address, status: result.status }).slice(0, 150)}`
         );
         return result;
       })
@@ -422,10 +469,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
+        status: "error",
         error: message,
         errorType: "connection_error",
         message: `Batch lookup failed: ${message}. Retry in a moment — this is usually transient.`,
-        properties: [],
+        properties: entries.map((e) =>
+          errorZillowProperty(
+            e.address,
+            `Lookup failed unexpectedly: ${message}. Retry in a moment — this is usually transient.`,
+            "connection_error"
+          )
+        ),
       },
       { status: 200 }
     );
