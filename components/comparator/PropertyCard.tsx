@@ -123,6 +123,7 @@ function formatLotSize(lotSize: number): string {
 
 function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCountdownSec }: PropertyCardProps) {
   const [imageError, setImageError] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editValues, setEditValues] = useState<{
     bedrooms?: number | string;
@@ -135,6 +136,10 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
   const [overrides, setOverrides] = useState<Record<string, unknown>>({});
   const [liveValuation, setLiveValuation] = useState<ValuationResult | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
     if (property.overrides) {
@@ -353,19 +358,21 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           )}
         </div>
 
-        <div className="absolute right-3 top-3">
-          <button
-            onClick={() => setEditMode(!editMode)}
-            className="inline-flex items-center justify-center rounded-md bg-white/90 hover:bg-white p-2 text-foreground shadow-sm transition-colors"
-            title={editMode ? "Cancel editing" : "Edit property details"}
-          >
-            {editMode ? (
-              <X className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <Edit2 className="h-4 w-4" aria-hidden="true" />
-            )}
-          </button>
-        </div>
+        {isClient && (
+          <div className="absolute right-3 top-3">
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className="inline-flex items-center justify-center rounded-md bg-white/90 hover:bg-white p-2 text-foreground shadow-sm transition-colors"
+              title={editMode ? "Cancel editing" : "Edit property details"}
+            >
+              {editMode ? (
+                <X className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Edit2 className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        )}
 
         {shouldShowImage && (
           <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none">
@@ -421,7 +428,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
         )}
 
         <div className="mt-4 divide-y divide-border border-t border-border">
-          {editMode ? (
+          {isClient && editMode ? (
             <>
               <div className="flex justify-between items-center py-1.5">
                 <span className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -661,7 +668,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           )}
         </div>
 
-        {editMode && (
+        {isClient && editMode && (
           <div className="flex gap-2 mt-3 pt-3 border-t border-border">
             <button
               onClick={handleSave}
