@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { createHash } from "crypto";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 async function requireUser(): Promise<
   { ok: true; userId: string } | { ok: false; response: NextResponse }
 > {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   if (!supabase) {
     return {
       ok: false,
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
     .update(address.toLowerCase().trim())
     .digest("hex");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   if (!supabase) {
     return NextResponse.json(
       { ok: false, error: "supabase_unavailable" },
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error("[property-overrides POST] upsert failed:", error);
       return NextResponse.json(
-        { ok: false, error: "database_error" },
+        { ok: false, error: "database_error", details: error.message },
         { status: 500 }
       );
     }
@@ -141,7 +142,7 @@ export async function DELETE(req: NextRequest) {
     .update(address.toLowerCase().trim())
     .digest("hex");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   if (!supabase) {
     return NextResponse.json(
       { ok: false, error: "supabase_unavailable" },
@@ -150,17 +151,25 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("property_overrides")
       .delete()
       .eq("user_id", auth.userId)
-      .eq("address_hash", addressHash);
+      .eq("address_hash", addressHash)
+      .select();
 
     if (error) {
       console.error("[property-overrides DELETE] delete failed:", error);
       return NextResponse.json(
-        { ok: false, error: "database_error" },
+        { ok: false, error: "database_error", details: error.message },
         { status: 500 }
+      );
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "not_found" },
+        { status: 404 }
       );
     }
 
