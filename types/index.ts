@@ -17,6 +17,18 @@ export interface ZillowDiagnosticDetails {
   bestConfidenceScore?: number;
 }
 
+/**
+ * Property record returned by lib/attom.ts.
+ * Field name retained as `ZillowProperty` for backward compatibility with the
+ * rest of the app (ComparisonTable, PropertyCard, ClientReport, etc.) — the
+ * underlying data source is now ATTOM (Property + AVM + Sales History).
+ *
+ *  - `price` / `zestimate`: ATTOM AVM value (falls back to market assessed value).
+ *  - `lastSoldPrice` / `lastSoldDate`: most recent record from saleshistory/detail.
+ *  - `taxAssessedValue`: ATTOM assessment.assessed.assdttlvalue.
+ *  - `daysOnMarket` / `photo`: ATTOM does not provide active listing data, so
+ *    these will be null. UI components should gracefully degrade.
+ */
 export interface ZillowProperty {
   zpid: string | null;
   address: string;
