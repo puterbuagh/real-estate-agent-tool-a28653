@@ -1,12 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { AlertTriangle, WifiOff, Home, Bed, Bath, Ruler, TrendingUp, Award, RefreshCw } from "lucide-react";
+import { AlertTriangle, WifiOff, Home, Bed, Bath, Ruler, TrendingUp, Award, RefreshCw, Edit2, Check, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import type { ZillowProperty } from "@/types";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { calculateAgentDeskEstimate } from "@/lib/valuation";
+import type { ValuationResult } from "@/types";
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -53,15 +55,25 @@ function MetricRow({
   value,
   highlight = false,
   displayValue = false,
+  isEdited = false,
 }: {
   label: string;
   value: React.ReactNode;
   highlight?: boolean;
   displayValue?: boolean;
+  isEdited?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 py-1.5 text-xs">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground flex items-center gap-1.5">
+        {label}
+        {isEdited && (
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-primary inline-block"
+            title="Manually edited"
+          />
+        )}
+      </span>
       <span
         className={cn(
           "font-medium tabular-nums",
@@ -111,6 +123,122 @@ function formatLotSize(lotSize: number): string {
 
 function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCountdownSec }: PropertyCardProps) {
   const [imageError, setImageError] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editValues, setEditValues] = useState<{
+    bedrooms?: number | string;
+    bathrooms?: number | string;
+    livingArea?: number | string;
+    yearBuilt?: number | string;
+    lotSize?: number | string;
+    propertySubType?: string;
+  }>({});
+  const [overrides, setOverrides] = useState<Record<string, unknown>>({});
+  const [liveValuation, setLiveValuation] = useState<ValuationResult | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (property.overrides) {
+      setOverrides(property.overrides);
+    }
+  }, [property.overrides]);
+
+  useEffect(() => {
+    if (!editMode) {
+      setEditValues({});
+      setLiveValuation(null);
+    }
+  }, [editMode]);
+
+  const recalculateValuation = () => {
+    if (!property.valuationInputs) return;
+    try {
+      const updated = calculateAgentDeskEstimate({
+        ...property.valuationInputs,
+        subjectSqft: typeof editValues.livingArea === 'number' ? editValues.livingArea : (property.livingArea ?? property.valuationInputs.subjectSqft),
+      });
+      setLiveValuation(updated);
+    } catch (err) {
+      console.error("[PropertyCard] recalculation failed:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (editMode) {
+      recalculateValuation();
+    }
+  }, [editValues.livingArea, editMode]);
+
+  const handleFieldChange = (field: string, value: number | string) => {
+    setEditValues((prev) => ({ ...prev, [field]: value === '' ? '' : value }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const changes: Record<string, unknown> = {};
+      if (editValues.bedrooms !== undefined && editValues.bedrooms !== property.bedrooms) {
+        changes.bedrooms = editValues.bedrooms === '' ? null : Number(editValues.bedrooms);
+      }
+      if (editValues.bathrooms !== undefined && editValues.bathrooms !== property.bathrooms) {
+        changes.bathrooms = editValues.bathrooms === '' ? null : Number(editValues.bathrooms);
+      }
+      if (editValues.livingArea !== undefined && editValues.livingArea !== property.livingArea) {
+        changes.livingArea = editValues.livingArea === '' ? null : Number(editValues.livingArea);
+      }
+      if (editValues.yearBuilt !== undefined && editValues.yearBuilt !== property.yearBuilt) {
+        changes.yearBuilt = editValues.yearBuilt === '' ? null : Number(editValues.yearBuilt);
+      }
+      if (editValues.lotSize !== undefined && editValues.lotSize !== property.lotSize) {
+        changes.lotSize = editValues.lotSize === '' ? null : Number(editValues.lotSize);
+      }
+      if (editValues.propertySubType !== undefined && editValues.propertySubType !== property.propertySubType) {
+        changes.propertySubType = editValues.propertySubType || null;
+      }
+
+      const res = await fetch("/api/property-overrides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: property.address,
+          overrides: changes,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Save failed");
+      }
+
+      setOverrides(changes);
+      setEditMode(false);
+      alert("Property details saved");
+    } catch (err) {
+      console.error("[PropertyCard] save failed:", err);
+      alert("Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    try {
+      const res = await fetch(
+        `/api/property-overrides?address=${encodeURIComponent(property.address)}`,
+        { method: "DELETE" }
+      );
+
+      if (!res.ok) {
+        throw new Error("Reset failed");
+      }
+
+      setOverrides({});
+      setEditValues({});
+      setEditMode(false);
+      alert("Reset to original data");
+    } catch (err) {
+      console.error("[PropertyCard] reset failed:", err);
+      alert("Failed to reset");
+    }
+  };
 
   if (property.status === "no_data") {
     const { street } = cleanAddress(property.address);
@@ -178,6 +306,16 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
   const imageSource = streetViewUrl || property.photo;
   const shouldShowImage = !imageError;
 
+  const displayBedrooms = editValues.bedrooms !== undefined ? editValues.bedrooms : property.bedrooms;
+  const displayBathrooms = editValues.bathrooms !== undefined ? editValues.bathrooms : property.bathrooms;
+  const displayLivingArea = editValues.livingArea !== undefined ? editValues.livingArea : property.livingArea;
+  const displayYearBuilt = editValues.yearBuilt !== undefined ? editValues.yearBuilt : property.yearBuilt;
+  const displayLotSize = editValues.lotSize !== undefined ? editValues.lotSize : property.lotSize;
+  const displayPropertySubType = editValues.propertySubType !== undefined ? editValues.propertySubType : property.propertySubType;
+
+  const currentValuation = liveValuation ?? property.agentDeskValuation;
+  const originalValuation = property.agentDeskValuation;
+
   return (
     <Card className="overflow-hidden flex flex-col group hover:border-primary/40 hover:shadow-md transition-all duration-200">
       <div className="relative h-44 w-full bg-muted">
@@ -213,6 +351,20 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
               <TrendingUp className="h-3 w-3" aria-hidden="true" /> Highest Value
             </span>
           )}
+        </div>
+
+        <div className="absolute right-3 top-3">
+          <button
+            onClick={() => setEditMode(!editMode)}
+            className="inline-flex items-center justify-center rounded-md bg-white/90 hover:bg-white p-2 text-foreground shadow-sm transition-colors"
+            title={editMode ? "Cancel editing" : "Edit property details"}
+          >
+            {editMode ? (
+              <X className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Edit2 className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
         </div>
 
         {shouldShowImage && (
@@ -256,107 +408,277 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           )}
         </div>
 
-        {(property.bedrooms !== null || property.bathrooms !== null || property.livingArea !== null) && (
+        {!editMode && (displayBedrooms !== null || displayBathrooms !== null || displayLivingArea !== null) && (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {property.bedrooms !== null && <Badge icon={Bed}>{property.bedrooms} bd</Badge>}
-            {property.bathrooms !== null && <Badge icon={Bath}>{property.bathrooms} ba</Badge>}
-            {property.livingArea !== null && (
+            {displayBedrooms !== null && <Badge icon={Bed}>{displayBedrooms} bd</Badge>}
+            {displayBathrooms !== null && <Badge icon={Bath}>{displayBathrooms} ba</Badge>}
+            {displayLivingArea !== null && (
               <Badge icon={Ruler}>
-                {property.livingArea.toLocaleString()} sqft
+                {Number(displayLivingArea).toLocaleString()} sqft
               </Badge>
             )}
           </div>
         )}
 
         <div className="mt-4 divide-y divide-border border-t border-border">
-          {property.pricePerSqft !== null && (
-            <MetricRow
-              label="Price / sqft"
-              displayValue
-              value={`$${property.pricePerSqft.toLocaleString()}`}
-            />
-          )}
-          {shouldShowEstimatedValue && (
-            <MetricRow
-              label="Est. value"
-              displayValue
-              value={formatCurrency(property.estimatedValue!)}
-            />
-          )}
-          {shouldShowLastSold && (
-            <MetricRow
-              label="Last sold"
-              displayValue
-              value={
-                property.lastSoldDate
-                  ? `${formatCurrency(property.lastSoldPrice!)} \u00b7 ${formatDate(property.lastSoldDate)}`
-                  : formatCurrency(property.lastSoldPrice!)
-              }
-            />
-          )}
-          {property.yearBuilt !== null && (
-            <MetricRow
-              label="Year built"
-              value={property.yearBuilt}
-            />
-          )}
-          {property.lotSize !== null && (
-            <MetricRow
-              label="Lot size"
-              value={formatLotSize(property.lotSize)}
-            />
-          )}
-          {property.taxAssessedValue !== null && (
-            <MetricRow
-              label="Tax assessed"
-              displayValue
-              value={formatCurrency(property.taxAssessedValue)}
-            />
-          )}
-          {property.propertyType !== null && (
-            <MetricRow
-              label="Property type"
-              value={property.propertyType}
-            />
+          {editMode ? (
+            <>
+              <div className="flex justify-between items-center py-1.5">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  Beds
+                  {overrides.bedrooms !== undefined && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                  )}
+                </span>
+                <input
+                  type="number"
+                  value={editValues.bedrooms !== undefined ? editValues.bedrooms : (property.bedrooms ?? '')}
+                  onChange={(e) => handleFieldChange("bedrooms", e.target.value)}
+                  placeholder="Add beds"
+                  className="w-20 text-right text-xs border border-border rounded px-2 py-1 bg-background"
+                  min={0}
+                  max={20}
+                />
+              </div>
+              <div className="flex justify-between items-center py-1.5">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  Baths
+                  {overrides.bathrooms !== undefined && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                  )}
+                </span>
+                <input
+                  type="number"
+                  value={editValues.bathrooms !== undefined ? editValues.bathrooms : (property.bathrooms ?? '')}
+                  onChange={(e) => handleFieldChange("bathrooms", e.target.value)}
+                  placeholder="Add baths"
+                  className="w-20 text-right text-xs border border-border rounded px-2 py-1 bg-background"
+                  min={0}
+                  max={20}
+                  step={0.5}
+                />
+              </div>
+              <div className="flex justify-between items-center py-1.5">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  Sqft
+                  {overrides.livingArea !== undefined && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                  )}
+                </span>
+                <input
+                  type="number"
+                  value={editValues.livingArea !== undefined ? editValues.livingArea : (property.livingArea ?? '')}
+                  onChange={(e) => handleFieldChange("livingArea", e.target.value)}
+                  placeholder="Add sqft"
+                  className="w-24 text-right text-xs border border-border rounded px-2 py-1 bg-background"
+                  min={0}
+                  max={50000}
+                />
+              </div>
+              <div className="flex justify-between items-center py-1.5">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  Year built
+                  {overrides.yearBuilt !== undefined && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                  )}
+                </span>
+                <input
+                  type="number"
+                  value={editValues.yearBuilt !== undefined ? editValues.yearBuilt : (property.yearBuilt ?? '')}
+                  onChange={(e) => handleFieldChange("yearBuilt", e.target.value)}
+                  placeholder="Add year"
+                  className="w-20 text-right text-xs border border-border rounded px-2 py-1 bg-background"
+                  min={1800}
+                  max={new Date().getFullYear() + 5}
+                />
+              </div>
+              <div className="flex justify-between items-center py-1.5">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  Lot size
+                  {overrides.lotSize !== undefined && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                  )}
+                </span>
+                <input
+                  type="number"
+                  value={editValues.lotSize !== undefined ? editValues.lotSize : (property.lotSize ?? '')}
+                  onChange={(e) => handleFieldChange("lotSize", e.target.value)}
+                  placeholder="Add lot size"
+                  className="w-24 text-right text-xs border border-border rounded px-2 py-1 bg-background"
+                  min={0}
+                  step={0.01}
+                />
+              </div>
+              <div className="flex justify-between items-center py-1.5">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  Property type
+                  {overrides.propertySubType !== undefined && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                  )}
+                </span>
+                <select
+                  value={editValues.propertySubType !== undefined ? editValues.propertySubType : (property.propertySubType ?? '')}
+                  onChange={(e) => handleFieldChange("propertySubType", e.target.value)}
+                  className="text-right text-xs border border-border rounded px-2 py-1 bg-background"
+                >
+                  <option value="">Select type</option>
+                  <option value="Single Family Residence">Single Family</option>
+                  <option value="Condominium">Condo</option>
+                  <option value="Townhouse">Townhouse</option>
+                  <option value="Multi-Family">Multi-Family</option>
+                  <option value="Land">Land</option>
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              {property.pricePerSqft !== null && (
+                <MetricRow
+                  label="Price / sqft"
+                  displayValue
+                  value={`$${property.pricePerSqft.toLocaleString()}`}
+                />
+              )}
+              {shouldShowEstimatedValue && (
+                <MetricRow
+                  label="Est. value"
+                  displayValue
+                  value={formatCurrency(property.estimatedValue!)}
+                />
+              )}
+              {shouldShowLastSold && (
+                <MetricRow
+                  label="Last sold"
+                  displayValue
+                  value={
+                    property.lastSoldDate
+                      ? `${formatCurrency(property.lastSoldPrice!)} \u00b7 ${formatDate(property.lastSoldDate)}`
+                      : formatCurrency(property.lastSoldPrice!)
+                  }
+                />
+              )}
+              {displayBedrooms !== null && (
+                <MetricRow
+                  label="Beds"
+                  value={displayBedrooms}
+                  isEdited={overrides.bedrooms !== undefined}
+                />
+              )}
+              {displayBathrooms !== null && (
+                <MetricRow
+                  label="Baths"
+                  value={displayBathrooms}
+                  isEdited={overrides.bathrooms !== undefined}
+                />
+              )}
+              {displayLivingArea !== null && (
+                <MetricRow
+                  label="Sqft"
+                  value={Number(displayLivingArea).toLocaleString()}
+                  isEdited={overrides.livingArea !== undefined}
+                />
+              )}
+              {displayYearBuilt !== null && (
+                <MetricRow
+                  label="Year built"
+                  value={displayYearBuilt}
+                  isEdited={overrides.yearBuilt !== undefined}
+                />
+              )}
+              {displayLotSize !== null && (
+                <MetricRow
+                  label="Lot size"
+                  value={formatLotSize(Number(displayLotSize))}
+                  isEdited={overrides.lotSize !== undefined}
+                />
+              )}
+              {property.taxAssessedValue !== null && (
+                <MetricRow
+                  label="Tax assessed"
+                  displayValue
+                  value={formatCurrency(property.taxAssessedValue)}
+                />
+              )}
+              {displayPropertySubType !== null && (
+                <MetricRow
+                  label="Property type"
+                  value={displayPropertySubType}
+                  isEdited={overrides.propertySubType !== undefined}
+                />
+              )}
+            </>
           )}
 
-          {property.agentDeskValuation && (
+          {currentValuation && (
             <>
               <div className="border-t border-border my-2" />
 
               <div className="flex justify-between items-center py-1.5">
                 <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  AgentDesk Estimate
+                  {editMode && liveValuation ? "AgentDesk Estimate (edited)" : "AgentDesk Estimate"}
                   <span
                     className={cn(
                       "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                      property.agentDeskValuation.confidence === "high" &&
+                      currentValuation.confidence === "high" &&
                         "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-                      property.agentDeskValuation.confidence === "medium" &&
+                      currentValuation.confidence === "medium" &&
                         "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-                      property.agentDeskValuation.confidence === "low" &&
+                      currentValuation.confidence === "low" &&
                         "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                     )}
                   >
-                    {property.agentDeskValuation.confidence}
+                    {currentValuation.confidence}
                   </span>
                 </span>
                 <span className="text-xs font-semibold font-display tabular-nums">
-                  {formatCurrency(property.agentDeskValuation.estimate)}
+                  {formatCurrency(currentValuation.estimate)}
+                  {editMode && liveValuation && originalValuation && liveValuation.estimate !== originalValuation.estimate && (
+                    <span className="ml-1 text-[10px] text-muted-foreground">
+                      {liveValuation.estimate > originalValuation.estimate ? "↑" : "↓"}
+                    </span>
+                  )}
                 </span>
               </div>
+
+              {editMode && liveValuation && originalValuation && liveValuation.estimate !== originalValuation.estimate && (
+                <div className="flex justify-between py-1">
+                  <span className="text-[10px] text-muted-foreground">Original estimate</span>
+                  <span className="text-[10px] text-muted-foreground tabular-nums">
+                    {formatCurrency(originalValuation.estimate)}
+                  </span>
+                </div>
+              )}
 
               <div className="flex justify-between py-1.5">
                 <span className="text-xs text-muted-foreground">Estimate range</span>
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  {formatCurrency(property.agentDeskValuation.varianceLow)}
+                  {formatCurrency(currentValuation.varianceLow)}
                   {" — "}
-                  {formatCurrency(property.agentDeskValuation.varianceHigh)}
+                  {formatCurrency(currentValuation.varianceHigh)}
                 </span>
               </div>
             </>
           )}
         </div>
+
+        {editMode && (
+          <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 text-sm bg-primary text-primary-foreground rounded-md py-1.5 font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              <Check className="h-3 w-3" aria-hidden="true" />
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+            <button
+              onClick={handleReset}
+              className="text-sm text-muted-foreground hover:text-foreground px-3"
+            >
+              Reset
+            </button>
+          </div>
+        )}
       </div>
     </Card>
   );
