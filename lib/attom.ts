@@ -7,6 +7,7 @@ const ATTOM_PROPERTY_DETAIL = `${ATTOM_BASE_URL}/propertyapi/v1.0.0/property/det
 const ATTOM_PROPERTY_BASIC = `${ATTOM_BASE_URL}/propertyapi/v1.0.0/property/basicprofile`;
 const ATTOM_AVM_DETAIL = `${ATTOM_BASE_URL}/propertyapi/v1.0.0/attomavm/detail`;
 const ATTOM_SALES_HISTORY = `${ATTOM_BASE_URL}/propertyapi/v1.0.0/saleshistory/detail`;
+const ATTOM_SALES_COMPS = `${ATTOM_BASE_URL}/propertyapi/v1.0.0/sale/snapshot`;
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 2;
@@ -359,6 +360,70 @@ function mergePropertyData(
     status: "ok",
     diagnosticDetails,
   };
+}
+
+export async function fetchComparableSales(
+  latitude: number,
+  longitude: number,
+  radiusMiles: number = 0.5
+): Promise<Array<{ salePrice: number; saleDate: string; sqft: number }>> {
+  const apiKey = hasUsableAttomKey();
+  if (!apiKey) {
+    console.warn("[attom fetchComparableSales] ATTOM_API_KEY missing");
+    return [];
+  }
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    console.warn("[attom fetchComparableSales] Invalid coordinates");
+    return [];
+  }
+
+  console.log(
+    `[attom fetchComparableSales] fetching comps near lat=${latitude} lng=${longitude} radius=${radiusMiles}mi`
+  );
+
+  const result = await callAttomEndpoint(
+    `${ATTOM_SALES_COMPS}?latitude=${latitude}&longitude=${longitude}&radius=${radiusMiles}`,
+    apiKey,
+    `sale/snapshot (${latitude},${longitude})`
+  );
+
+  if (!result.ok || !result.data) {
+    console.warn(
+      `[attom fetchComparableSales] fetch failed: ${result.errorType} - ${result.errorMessage ?? "unknown"}`
+    );
+    return [];
+  }
+
+  const properties = result.data.property;
+  if (!Array.isArray(properties) || properties.length === 0) {
+    console.log("[attom fetchComparableSales] no comps returned");
+    return [];
+  }
+
+  const comps: Array<{ salePrice: number; saleDate: string; sqft: number }> = [];
+
+  for (const prop of properties) {
+    if (!prop || typeof prop !== "object") continue;
+    const propObj = prop as Record<string, unknown>;
+
+    const sale = getNested(propObj, ["sale"]);
+    const building = getNested(propObj, ["building"]);
+    const size = getNested(building, ["size"]);
+
+    const salePrice = toNumber(getNested(sale, ["amount", "saleamt"]));
+    const saleDate = toStringOrNull(getNested(sale, ["amount", "salerecdate"]));
+    const sqft =
+      toNumber(getNested(size, ["livingsize"])) ??
+      toNumber(getNested(size, ["universalsize"]));
+
+    if (salePrice && saleDate && sqft && sqft > 0) {
+      comps.push({ salePrice, saleDate, sqft });
+    }
+  }
+
+  console.log(`[attom fetchComparableSales] extracted ${comps.length} valid comps`);
+  return comps;
 }
 
 export async function fetchPropertyByAddress(
