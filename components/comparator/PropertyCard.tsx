@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { AlertTriangle, WifiOff, Home, Bed, Bath, Ruler, Calendar, TrendingUp, Award, RefreshCw } from "lucide-react";
+import { AlertTriangle, WifiOff, Home, Bed, Bath, Ruler, TrendingUp, Award, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
@@ -66,8 +66,40 @@ function MetricRow({
   );
 }
 
+/**
+ * Dedupe address parts — ATTOM sometimes returns the city/state/zip embedded
+ * in line1 (e.g. "123 Main St, Austin, TX 78701") AND again in the separate
+ * locality/countrySubd/postal1 fields, which produces a duplicated tail when
+ * we join everything. We split the full address, normalize, and remove any
+ * trailing parts that already appear earlier in the chain.
+ */
+function cleanAddress(raw: string): { street: string; cityStateZip: string } {
+  const parts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return { street: raw, cityStateZip: "" };
+  }
+
+  // Drop exact-duplicate consecutive parts (case-insensitive)
+  const dedup: string[] = [];
+  for (const p of parts) {
+    const lower = p.toLowerCase();
+    if (!dedup.some((existing) => existing.toLowerCase() === lower)) {
+      dedup.push(p);
+    }
+  }
+
+  const street = dedup[0] ?? raw;
+  const cityStateZip = dedup.slice(1).join(", ");
+  return { street, cityStateZip };
+}
+
 function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCountdownSec }: PropertyCardProps) {
   if (property.status === "no_data") {
+    const { street } = cleanAddress(property.address);
     return (
       <Card className="overflow-hidden border-[hsl(38_92%_75%)] bg-[hsl(48_100%_97%)]">
         <div className="p-5 flex flex-col items-start gap-2">
@@ -76,8 +108,8 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           </div>
           <p className="font-display text-sm font-semibold text-foreground">No data found</p>
           <p className="text-xs text-muted-foreground break-words">
-            We couldn&apos;t find a Zillow record for{" "}
-            <span className="font-medium text-foreground">{property.address}</span>. Double-check the address and try again.
+            We couldn&apos;t find a record for{" "}
+            <span className="font-medium text-foreground">{street}</span>. Double-check the address and try again.
           </p>
         </div>
       </Card>
@@ -85,6 +117,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
   }
 
   if (property.status === "error") {
+    const { street } = cleanAddress(property.address);
     return (
       <Card className="overflow-hidden border-destructive/40 bg-destructive/5">
         <div className="p-5 flex flex-col items-start gap-2">
@@ -101,7 +134,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
             ) : null}
           </p>
           <p className="text-[11px] text-muted-foreground/80 mt-1 break-words">
-            {property.address}
+            {street}
           </p>
           {onRetry && (
             <Button size="sm" variant="outline" onClick={onRetry} className="mt-1">
@@ -120,7 +153,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
   }
 
   const headlinePrice = property.price ?? property.zestimate;
-  const domHighlight = (property.daysOnMarket ?? 0) > 60;
+  const { street: streetAddress, cityStateZip } = cleanAddress(property.address);
 
   return (
     <Card className="overflow-hidden flex flex-col group hover:border-primary/40 hover:shadow-md transition-all duration-200">
@@ -129,7 +162,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           <>
             <Image
               src={property.photo}
-              alt={property.address}
+              alt={streetAddress}
               fill
               sizes="(max-width: 768px) 100vw, 33vw"
               className="object-cover"
@@ -162,17 +195,29 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
         {property.photo && (
           <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none">
             <p className="font-display text-xs font-medium text-white/95 line-clamp-2 drop-shadow-md">
-              {property.address}
+              {streetAddress}
             </p>
+            {cityStateZip && (
+              <p className="font-display text-[10px] font-normal text-white/80 mt-0.5 drop-shadow-md">
+                {cityStateZip}
+              </p>
+            )}
           </div>
         )}
       </div>
 
       <div className="flex flex-1 flex-col p-5">
         {!property.photo && (
-          <p className="font-display text-xs font-medium text-muted-foreground line-clamp-2 min-h-[2rem]">
-            {property.address}
-          </p>
+          <>
+            <p className="font-display text-xs font-medium text-foreground line-clamp-2">
+              {streetAddress}
+            </p>
+            {cityStateZip && (
+              <p className="font-display text-[10px] font-normal text-muted-foreground mt-0.5">
+                {cityStateZip}
+              </p>
+            )}
+          </>
         )}
 
         <div className={cn(!property.photo && "mt-2")}>
@@ -205,22 +250,13 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
             }
           />
           <MetricRow
-            label="Year built"
-            value={property.yearBuilt ?? "\u2014"}
-          />
-          <MetricRow
-            label="Days on market"
+            label="Est. value"
+            displayValue
             value={
-              property.daysOnMarket !== null && property.daysOnMarket !== undefined ? (
-                <span className="inline-flex items-center gap-1">
-                  <Calendar className="h-3 w-3" aria-hidden="true" />
-                  {property.daysOnMarket}
-                </span>
-              ) : (
-                "\u2014"
-              )
+              property.estimatedValue
+                ? formatCurrency(property.estimatedValue)
+                : "\u2014"
             }
-            highlight={domHighlight}
           />
           <MetricRow
             label="Last sold"
@@ -230,6 +266,18 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
                 ? `${formatCurrency(property.lastSoldPrice)}${
                     property.lastSoldDate ? ` \u00b7 ${formatDate(property.lastSoldDate)}` : ""
                   }`
+                : "\u2014"
+            }
+          />
+          <MetricRow
+            label="Year built"
+            value={property.yearBuilt ?? "\u2014"}
+          />
+          <MetricRow
+            label="Lot size"
+            value={
+              property.lotSize
+                ? `${property.lotSize.toLocaleString()} sqft`
                 : "\u2014"
             }
           />
