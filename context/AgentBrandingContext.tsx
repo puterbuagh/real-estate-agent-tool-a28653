@@ -16,7 +16,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 const STORAGE_KEY = "agentdesk:agent-branding:v1";
 
 const DEFAULT_BRANDING: AgentBranding = {
-  name: "",
+  fullName: "",
   brokerage: "",
   phone: "",
   email: "",
@@ -45,8 +45,8 @@ const AgentBrandingContext = createContext<AgentBrandingContextValue | null>(
   null
 );
 
-function deriveInitials(name: string): string {
-  const cleaned = (name ?? "").trim();
+function deriveInitials(fullName: string): string {
+  const cleaned = (fullName ?? "").trim();
   if (!cleaned) return "AD";
   const parts = cleaned.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "AD";
@@ -64,7 +64,7 @@ function readFromStorage(): AgentBranding {
     const parsed = JSON.parse(raw) as Partial<AgentBranding> | null;
     if (!parsed || typeof parsed !== "object") return DEFAULT_BRANDING;
     return {
-      name: typeof parsed.name === "string" ? parsed.name : "",
+      fullName: typeof parsed.fullName === "string" ? parsed.fullName : "",
       brokerage:
         typeof parsed.brokerage === "string" ? parsed.brokerage : "",
       phone: typeof parsed.phone === "string" ? parsed.phone : "",
@@ -86,16 +86,12 @@ function readFromStorage(): AgentBranding {
 
 function rowToBranding(row: Record<string, unknown> | null | undefined): AgentBranding | null {
   if (!row) return null;
-  // Database column is `full_name`; map it to our in-app `name` field.
-  // Tolerate either column name in case of legacy rows.
   const fullName =
     typeof row.full_name === "string"
       ? (row.full_name as string)
-      : typeof row.name === "string"
-      ? (row.name as string)
       : "";
   return {
-    name: fullName,
+    fullName,
     brokerage: typeof row.brokerage === "string" ? row.brokerage : "",
     phone: typeof row.phone === "string" ? row.phone : "",
     email: typeof row.email === "string" ? row.email : "",
@@ -118,7 +114,7 @@ async function persistToApi(branding: AgentBranding): Promise<void> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: branding.name ?? "",
+        fullName: branding.fullName ?? "",
         brokerage: branding.brokerage ?? "",
         phone: branding.phone ?? "",
         email: branding.email ?? "",
@@ -132,7 +128,7 @@ async function persistToApi(branding: AgentBranding): Promise<void> {
   }
 }
 
-export function AgentBrandingProvider({ children }: { children: ReactNode }) {
+function AgentBrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBrandingState] = useState<AgentBranding>(DEFAULT_BRANDING);
   const [hydrated, setHydrated] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -149,13 +145,11 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Hydrate from localStorage first (instant UI), then sync with Supabase.
   useEffect(() => {
     setBrandingState(readFromStorage());
     setHydrated(true);
   }, []);
 
-  // Pull from Supabase whenever auth state changes.
   useEffect(() => {
     const supabase = supabaseRef.current;
     if (!supabase) {
@@ -181,9 +175,8 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
         if (!error && data) {
           const next = rowToBranding(data as Record<string, unknown>);
           if (next) {
-            // Merge: server is source of truth, but keep local fields if server is empty.
             setBrandingState((prev) => ({
-              name: next.name || prev.name,
+              fullName: next.fullName || prev.fullName,
               brokerage: next.brokerage || prev.brokerage,
               phone: next.phone || prev.phone,
               email: next.email || prev.email,
@@ -214,7 +207,6 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Mirror to localStorage for offline / instant-paint fallback.
   useEffect(() => {
     if (!hydrated) return;
     if (typeof window === "undefined") return;
@@ -238,7 +230,6 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
   const updateBranding = useCallback((next: Partial<AgentBranding>) => {
     setBrandingState((prev) => {
       const merged = { ...prev, ...next };
-      // fire-and-forget API persistence
       void persistToApi(merged);
       return merged;
     });
@@ -246,8 +237,6 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
 
   const setBranding = useCallback((next: AgentBranding) => {
     setBrandingState(next);
-    // fire-and-forget API persistence so location + other fields
-    // round-trip to the server in addition to localStorage.
     void persistToApi(next);
   }, []);
 
@@ -269,7 +258,7 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
 
     const payload = {
       id: user.id,
-      full_name: branding.name ?? "",
+      full_name: branding.fullName ?? "",
       email: branding.email ?? user.email ?? "",
       brokerage: branding.brokerage ?? "",
       phone: branding.phone ?? "",
@@ -282,14 +271,13 @@ export function AgentBrandingProvider({ children }: { children: ReactNode }) {
       .upsert(payload, { onConflict: "id" });
 
     if (error) return { ok: false, error: error.message };
-    // also mirror to API route for any server-side consumers
     void persistToApi(branding);
     return { ok: true };
   }, [branding]);
 
   const value = useMemo<AgentBrandingContextValue>(() => {
-    const initials = deriveInitials(branding.name);
-    const isConfigured = Boolean((branding.name ?? "").trim());
+    const initials = deriveInitials(branding.fullName);
+    const isConfigured = Boolean((branding.fullName ?? "").trim());
     return {
       branding,
       initials,
