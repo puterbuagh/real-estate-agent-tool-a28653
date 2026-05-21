@@ -5,38 +5,23 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
 import { usePipeline } from "@/context/PipelineContext";
+import { useAgentBranding } from "@/context/AgentBrandingContext";
 import ComparisonSelector from "@/components/client-report/ComparisonSelector";
-import AgentBrandingForm from "@/components/client-report/AgentBrandingForm";
 import ReportPreview from "@/components/client-report/ReportPreview";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import type { Comparison } from "@/types";
 
-export interface AgentBranding {
-  name: string;
-  phone: string;
-  email: string;
-  brokerage: string;
-}
-
-export const DEFAULT_BRANDING: AgentBranding = {
-  name: "Jordan Miller",
-  phone: "(614) 555-0142",
-  email: "jordan@agentdesk.app",
-  brokerage: "AgentDesk Realty",
-};
-
-const BRANDING_KEY = "agentdesk:agent-branding:v1";
 const CLIENT_NAME_KEY = "agentdesk:client-report:client-name";
 
 function ClientReportInner() {
   const [mounted, setMounted] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [branding, setBranding] = React.useState<AgentBranding>(DEFAULT_BRANDING);
   const [clientName, setClientName] = React.useState<string>("");
 
   const pipelineCtx = usePipeline();
   const comparisons: Comparison[] = pipelineCtx?.comparisons ?? [];
+  const { branding } = useAgentBranding();
 
   const searchParams = useSearchParams();
 
@@ -50,11 +35,6 @@ function ClientReportInner() {
     }
     if (typeof window !== "undefined") {
       try {
-        const stored = window.localStorage.getItem(BRANDING_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored) as Partial<AgentBranding>;
-          setBranding({ ...DEFAULT_BRANDING, ...parsed });
-        }
         const storedClient = window.localStorage.getItem(CLIENT_NAME_KEY);
         if (storedClient) setClientName(storedClient);
       } catch {
@@ -62,15 +42,6 @@ function ClientReportInner() {
       }
     }
   }, [searchParams]);
-
-  React.useEffect(() => {
-    if (!mounted || typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(BRANDING_KEY, JSON.stringify(branding));
-    } catch {
-      // ignore
-    }
-  }, [branding, mounted]);
 
   React.useEffect(() => {
     if (!mounted || typeof window === "undefined") return;
@@ -145,10 +116,29 @@ function ClientReportInner() {
               2. Your branding
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
-              Saved to this browser. Fill once, reuse for every client.
+              Managed on your Profile page. Changes apply to all reports.
             </p>
           </div>
-          <AgentBrandingForm value={branding} onChange={setBranding} />
+          <div className="rounded-md border border-border bg-muted/30 p-4 space-y-2">
+            <p className="font-display text-base font-semibold tracking-tight text-foreground">
+              {branding.fullName || "Set your name on the Profile page"}
+            </p>
+            {branding.brokerage && (
+              <p className="text-sm text-muted-foreground">
+                {branding.brokerage}
+              </p>
+            )}
+            {branding.phone && (
+              <p className="text-xs text-muted-foreground">
+                {branding.phone}
+              </p>
+            )}
+            {branding.email && (
+              <p className="text-xs text-muted-foreground">
+                {branding.email}
+              </p>
+            )}
+          </div>
         </Card>
       </section>
 
@@ -200,4 +190,3 @@ function ClientReportClient() {
 }
 
 export default ClientReportClient;
-
