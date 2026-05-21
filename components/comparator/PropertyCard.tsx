@@ -66,34 +66,24 @@ function MetricRow({
   );
 }
 
-/**
- * Dedupe address parts — ATTOM sometimes returns the city/state/zip embedded
- * in line1 (e.g. "123 Main St, Austin, TX 78701") AND again in the separate
- * locality/countrySubd/postal1 fields, which produces a duplicated tail when
- * we join everything. We split the full address, normalize, and remove any
- * trailing parts that already appear earlier in the chain.
- */
+function formatAddress(address: string): string {
+  const parts = address.split(',').map(p => p.trim()).filter(Boolean);
+  const unique = parts.filter((part, index) => 
+    parts.findIndex(p => p.toLowerCase() === part.toLowerCase()) === index
+  );
+  return unique.join(', ');
+}
+
 function cleanAddress(raw: string): { street: string; cityStateZip: string } {
-  const parts = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const cleaned = formatAddress(raw);
+  const parts = cleaned.split(',').map(s => s.trim()).filter(Boolean);
 
   if (parts.length === 0) {
     return { street: raw, cityStateZip: "" };
   }
 
-  // Drop exact-duplicate consecutive parts (case-insensitive)
-  const dedup: string[] = [];
-  for (const p of parts) {
-    const lower = p.toLowerCase();
-    if (!dedup.some((existing) => existing.toLowerCase() === lower)) {
-      dedup.push(p);
-    }
-  }
-
-  const street = dedup[0] ?? raw;
-  const cityStateZip = dedup.slice(1).join(", ");
+  const street = parts[0] ?? raw;
+  const cityStateZip = parts.slice(1).join(", ");
   return { street, cityStateZip };
 }
 
@@ -152,8 +142,12 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
     );
   }
 
-  const headlinePrice = property.price ?? property.zestimate;
+  const headlinePrice = property.price ?? property.zestimate ?? property.lastSoldPrice;
   const { street: streetAddress, cityStateZip } = cleanAddress(property.address);
+
+  // AVM fallback logic: show EITHER estimatedValue OR lastSoldPrice with date, not both
+  const shouldShowEstimatedValue = property.estimatedValue !== null;
+  const shouldShowLastSold = !shouldShowEstimatedValue && property.lastSoldPrice !== null;
 
   return (
     <Card className="overflow-hidden flex flex-col group hover:border-primary/40 hover:shadow-md transition-all duration-200">
@@ -221,9 +215,11 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
         )}
 
         <div className={cn(!property.photo && "mt-2")}>
-          <p className="font-display text-3xl font-semibold tracking-tight text-foreground tabular-nums">
-            {formatCurrency(headlinePrice)}
-          </p>
+          {headlinePrice !== null && (
+            <p className="font-display text-3xl font-semibold tracking-tight text-foreground tabular-nums">
+              {formatCurrency(headlinePrice)}
+            </p>
+          )}
           {property.zestimate && property.price && property.zestimate !== property.price && (
             <p className="text-[11px] text-muted-foreground mt-0.5">
               Zestimate: <span className="font-display font-medium text-foreground tabular-nums">{formatCurrency(property.zestimate)}</span>
@@ -231,65 +227,69 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           )}
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <Badge icon={Bed}>{property.bedrooms ?? "\u2014"} bd</Badge>
-          <Badge icon={Bath}>{property.bathrooms ?? "\u2014"} ba</Badge>
-          <Badge icon={Ruler}>
-            {property.livingArea ? `${property.livingArea.toLocaleString()} sqft` : "\u2014 sqft"}
-          </Badge>
-        </div>
+        {(property.bedrooms !== null || property.bathrooms !== null || property.livingArea !== null) && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {property.bedrooms !== null && <Badge icon={Bed}>{property.bedrooms} bd</Badge>}
+            {property.bathrooms !== null && <Badge icon={Bath}>{property.bathrooms} ba</Badge>}
+            {property.livingArea !== null && (
+              <Badge icon={Ruler}>
+                {property.livingArea.toLocaleString()} sqft
+              </Badge>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 divide-y divide-border border-t border-border">
-          <MetricRow
-            label="Price / sqft"
-            displayValue
-            value={
-              property.pricePerSqft
-                ? `$${property.pricePerSqft.toLocaleString()}`
-                : "\u2014"
-            }
-          />
-          <MetricRow
-            label="Est. value"
-            displayValue
-            value={
-              property.estimatedValue
-                ? formatCurrency(property.estimatedValue)
-                : "\u2014"
-            }
-          />
-          <MetricRow
-            label="Last sold"
-            displayValue
-            value={
-              property.lastSoldPrice
-                ? `${formatCurrency(property.lastSoldPrice)}${
-                    property.lastSoldDate ? ` \u00b7 ${formatDate(property.lastSoldDate)}` : ""
-                  }`
-                : "\u2014"
-            }
-          />
-          <MetricRow
-            label="Year built"
-            value={property.yearBuilt ?? "\u2014"}
-          />
-          <MetricRow
-            label="Lot size"
-            value={
-              property.lotSize
-                ? `${property.lotSize.toLocaleString()} sqft`
-                : "\u2014"
-            }
-          />
-          <MetricRow
-            label="Tax assessed"
-            displayValue
-            value={formatCurrency(property.taxAssessedValue)}
-          />
-          <MetricRow
-            label="Property type"
-            value={property.propertyType ?? "\u2014"}
-          />
+          {property.pricePerSqft !== null && (
+            <MetricRow
+              label="Price / sqft"
+              displayValue
+              value={`$${property.pricePerSqft.toLocaleString()}`}
+            />
+          )}
+          {shouldShowEstimatedValue && (
+            <MetricRow
+              label="Est. value"
+              displayValue
+              value={formatCurrency(property.estimatedValue!)}
+            />
+          )}
+          {shouldShowLastSold && (
+            <MetricRow
+              label="Last sold"
+              displayValue
+              value={
+                property.lastSoldDate
+                  ? `${formatCurrency(property.lastSoldPrice!)} \u00b7 ${formatDate(property.lastSoldDate)}`
+                  : formatCurrency(property.lastSoldPrice!)
+              }
+            />
+          )}
+          {property.yearBuilt !== null && (
+            <MetricRow
+              label="Year built"
+              value={property.yearBuilt}
+            />
+          )}
+          {property.lotSize !== null && (
+            <MetricRow
+              label="Lot size"
+              value={`${property.lotSize.toLocaleString()} sqft`}
+            />
+          )}
+          {property.taxAssessedValue !== null && (
+            <MetricRow
+              label="Tax assessed"
+              displayValue
+              value={formatCurrency(property.taxAssessedValue)}
+            />
+          )}
+          {property.propertyType !== null && (
+            <MetricRow
+              label="Property type"
+              value={property.propertyType}
+            />
+          )}
         </div>
       </div>
     </Card>
