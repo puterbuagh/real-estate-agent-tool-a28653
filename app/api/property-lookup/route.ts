@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { fetchPropertyByAddress } from "@/lib/attom";
-import type { ZillowProperty } from "@/types";
+import { fetchPropertyByAddress, fetchComparableSales } from "@/lib/attom";
+import { createHash } from "crypto";
+import { calculateAgentDeskEstimate } from "@/lib/valuation";
+import type { ZillowProperty, ValuationResult } from "@/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -181,6 +183,99 @@ function invalidCoordsProperty(address: string): ZillowProperty {
   );
 }
 
+async function calculateValuation(
+  property: ZillowProperty,
+  address: string,
+  latitude: number,
+  longitude: number
+): Promise<ValuationResult | null> {
+  if (
+    !property.lastSoldPrice ||
+    !property.lastSoldDate ||
+    !property.livingArea
+  ) {
+    return null;
+  }
+
+  const supabase = createSupabaseServerClient();
+  if (!supabase) return null;
+
+  const addressHash = createHash("sha256")
+    .update(address.toLowerCase().trim())
+    .digest("hex");
+
+  try {
+    const { data: cached } = await supabase
+      .from("property_valuations")
+      .select("*")
+      .eq("address_hash", addressHash)
+      .gt("expires_at", new Date().toISOString())
+      .single();
+
+    if (cached) {
+      return {
+        estimate: Number(cached.agentdesk_estimate),
+        variancePct: Number(cached.variance_pct),
+        varianceLow: Number(cached.variance_low),
+        varianceHigh: Number(cached.variance_high),
+        confidence: cached.confidence as "high" | "medium" | "low",
+        compCount: cached.comp_count,
+      };
+    }
+  } catch (err) {
+    console.warn("[property-lookup] cache check failed:", err);
+  }
+
+  let currentMortgageRate = 7.0;
+  try {
+    const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const fredRes = await fetch(`${origin}/api/mortgage-rate`, {
+      headers: { "User-Agent": "AgentDesk/1.0" },
+    });
+    const fredData = await fredRes.json();
+    if (fredData?.rate) currentMortgageRate = fredData.rate;
+  } catch (err) {
+    console.warn("[property-lookup] FRED fetch failed:", err);
+  }
+
+  const comps = await fetchComparableSales(latitude, longitude, 0.5);
+  console.log(`[property-lookup] fetched ${comps.length} comps for valuation`);
+
+  const valuation = calculateAgentDeskEstimate({
+    lastSalePrice: property.lastSoldPrice,
+    lastSaleDate: property.lastSoldDate,
+    subjectSqft: property.livingArea,
+    comps,
+    currentMortgageRate,
+  });
+
+  try {
+    await supabase.from("property_valuations").upsert({
+      address_hash: addressHash,
+      address,
+      agentdesk_estimate: valuation.estimate,
+      variance_pct: valuation.variancePct,
+      variance_low: valuation.varianceLow,
+      variance_high: valuation.varianceHigh,
+      confidence: valuation.confidence,
+      comp_count: valuation.compCount,
+      inputs: {
+        lastSalePrice: property.lastSoldPrice,
+        lastSaleDate: property.lastSoldDate,
+        sqft: property.livingArea,
+        compCount: comps.length,
+        mortgageRate: currentMortgageRate,
+      },
+      calculated_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+  } catch (err) {
+    console.warn("[property-lookup] cache upsert failed:", err);
+  }
+
+  return valuation;
+}
+
 export async function GET(req: NextRequest) {
   const startedAt = Date.now();
   const auth = await requireUser();
@@ -266,23 +361,45 @@ export async function GET(req: NextRequest) {
 
     const elapsed = Date.now() - startedAt;
     console.log(
-      `[property-lookup GET] ATTOM RESPONSE STATUS: ${property.status}${property.errorType ? ` (${property.errorType})` : ""}`
+      `[property-lookup GET] ATTOM RESPONSE STATUS: ${property.status}${
+        property.errorType ? ` (${property.errorType})` : ""
+      }`
     );
     console.log(
       `[property-lookup GET] RESULT: ${JSON.stringify({ zpid: property.zpid, address: property.address, status: property.status, errorMessage: property.errorMessage }).slice(0, 200)}`
     );
+
+    let agentDeskValuation: ValuationResult | null = null;
+    if (property.status === "ok") {
+      agentDeskValuation = await calculateValuation(
+        property,
+        address.trim(),
+        latitude,
+        longitude
+      );
+    }
+
+    const enrichedProperty = {
+      ...property,
+      agentDeskValuation,
+    };
+
     console.log(
-      `[property-lookup GET] result in ${elapsed}ms: status=${property.status}${property.errorType ? ` (${property.errorType})` : ""} zpid=${property.zpid ?? "null"}`
+      `[property-lookup GET] result in ${elapsed}ms: status=${property.status}${
+        property.errorType ? ` (${property.errorType})` : ""
+      } zpid=${property.zpid ?? "null"} valuation=${
+        agentDeskValuation ? "yes" : "no"
+      }`
     );
 
     if (property.status === "ok") {
-      return NextResponse.json({ ok: true, property });
+      return NextResponse.json({ ok: true, property: enrichedProperty });
     }
     if (property.status === "no_data") {
       return NextResponse.json({
         ok: false,
         status: "no_data",
-        property,
+        property: enrichedProperty,
         error: property.errorMessage ?? "No data found for this lookup",
         errorType: property.errorType ?? "not_found",
       });
@@ -290,7 +407,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: false,
       status: "error",
-      property,
+      property: enrichedProperty,
       error: property.errorMessage ?? "Data unavailable",
       errorType: property.errorType ?? "unknown",
     });
@@ -374,7 +491,15 @@ export async function POST(req: NextRequest) {
   });
 
   console.log(
-    `[property-lookup POST] LOOKUP REQUEST: batch=${entries.length} user=${auth.userId} addresses=${JSON.stringify(entries.map((e) => ({ address: sanitizeForLog(e.address, 40), lat: e.latitude, lng: e.longitude })))}`
+    `[property-lookup POST] LOOKUP REQUEST: batch=${entries.length} user=${
+      auth.userId
+    } addresses=${JSON.stringify(
+      entries.map((e) => ({
+        address: sanitizeForLog(e.address, 40),
+        lat: e.latitude,
+        lng: e.longitude,
+      }))
+    )}`
   );
 
   if (entries.length === 0 || entries.every((e) => !e.address)) {
@@ -417,12 +542,11 @@ export async function POST(req: NextRequest) {
   try {
     const properties = await Promise.all(
       entries.map(async (item, idx) => {
-        if (
-          item.latitude === undefined ||
-          item.longitude === undefined
-        ) {
+        if (item.latitude === undefined || item.longitude === undefined) {
           console.log(
-            `[property-lookup POST] MISSING COORDS [${idx}]: address="${sanitizeForLog(item.address)}" — returning not_found`
+            `[property-lookup POST] MISSING COORDS [${idx}]: address="${sanitizeForLog(
+              item.address
+            )}" — returning not_found`
           );
           return missingCoordsProperty(item.address);
         }
@@ -435,12 +559,16 @@ export async function POST(req: NextRequest) {
           item.longitude > 180
         ) {
           console.log(
-            `[property-lookup POST] INVALID COORDS [${idx}]: address="${sanitizeForLog(item.address)}" lat=${item.latitude} lng=${item.longitude}`
+            `[property-lookup POST] INVALID COORDS [${idx}]: address="${sanitizeForLog(
+              item.address
+            )}" lat=${item.latitude} lng=${item.longitude}`
           );
           return invalidCoordsProperty(item.address);
         }
         console.log(
-          `[property-lookup POST] CALLING ATTOM WITH [${idx}]: address="${sanitizeForLog(item.address)}" lat=${item.latitude} lng=${item.longitude}`
+          `[property-lookup POST] CALLING ATTOM WITH [${idx}]: address="${sanitizeForLog(
+            item.address
+          )}" lat=${item.latitude} lng=${item.longitude}`
         );
         const result = await fetchPropertyByAddress(
           item.address,
@@ -448,12 +576,32 @@ export async function POST(req: NextRequest) {
           item.longitude
         );
         console.log(
-          `[property-lookup POST] ATTOM RESPONSE STATUS [${idx}]: ${result.status}${result.errorType ? ` (${result.errorType})` : ""}`
+          `[property-lookup POST] ATTOM RESPONSE STATUS [${idx}]: ${result.status}${
+            result.errorType ? ` (${result.errorType})` : ""
+          }`
         );
         console.log(
-          `[property-lookup POST] RESULT [${idx}]: ${JSON.stringify({ zpid: result.zpid, address: result.address, status: result.status }).slice(0, 150)}`
+          `[property-lookup POST] RESULT [${idx}]: ${JSON.stringify({
+            zpid: result.zpid,
+            address: result.address,
+            status: result.status,
+          }).slice(0, 150)}`
         );
-        return result;
+
+        let agentDeskValuation: ValuationResult | null = null;
+        if (result.status === "ok") {
+          agentDeskValuation = await calculateValuation(
+            result,
+            item.address,
+            item.latitude,
+            item.longitude
+          );
+        }
+
+        return {
+          ...result,
+          agentDeskValuation,
+        };
       })
     );
 
