@@ -463,6 +463,9 @@ export async function fetchPropertyByAddress(
     );
   }
 
+  // Log full raw ATTOM response for debugging
+  console.log("[attom] RAW ATTOM PROPERTY RESPONSE:", JSON.stringify(propertyDetail, null, 2));
+
   // 2 & 3. AVM + sales history — fired in parallel, both optional
   const [avmResult, salesResult] = await Promise.all([
     callAttomEndpoint(
@@ -483,9 +486,16 @@ export async function fetchPropertyByAddress(
 
   if (!avmResult.ok) {
     console.log(`[attom] AVM miss (${avmResult.errorType}): ${avmResult.errorMessage ?? ""}`);
+  } else {
+    const avmProp = extractFirstProperty(avmResult.data);
+    console.log("[attom] RAW ATTOM AVM RESPONSE:", JSON.stringify(avmProp, null, 2));
   }
+
   if (!salesResult.ok) {
     console.log(`[attom] sales history miss (${salesResult.errorType}): ${salesResult.errorMessage ?? ""}`);
+  } else {
+    const salesProp = extractFirstProperty(salesResult.data);
+    console.log("[attom] RAW ATTOM SALES HISTORY RESPONSE:", JSON.stringify(salesProp, null, 2));
   }
 
   const merged = mergePropertyData(
