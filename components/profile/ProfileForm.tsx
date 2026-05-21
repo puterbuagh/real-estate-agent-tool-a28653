@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import type { AgentBranding } from "@/types";
 
 const schema = z.object({
-  name: z.string().trim().min(2, "Name is required").max(80, "Name is too long"),
+  fullName: z.string().trim().min(2, "Name is required").max(80, "Name is too long"),
   brokerage: z
     .string()
     .trim()
@@ -55,7 +55,7 @@ const schema = z.object({
 });
 
 type FormState = {
-  name: string;
+  fullName: string;
   brokerage: string;
   phone: string;
   email: string;
@@ -65,7 +65,7 @@ type FormState = {
 
 function toForm(b: AgentBranding): FormState {
   return {
-    name: b.name ?? "",
+    fullName: b.fullName ?? "",
     brokerage: b.brokerage ?? "",
     phone: b.phone ?? "",
     email: b.email ?? "",
@@ -199,7 +199,7 @@ function ProfileForm() {
     setSubmitting(true);
     try {
       setBranding({
-        name: parsed.data.name,
+        fullName: parsed.data.fullName,
         brokerage: parsed.data.brokerage || "",
         phone: parsed.data.phone || "",
         email: parsed.data.email || "",
@@ -250,7 +250,7 @@ function ProfileForm() {
         </div>
         <div className="min-w-0">
           <p className="font-display text-lg font-semibold tracking-tight text-foreground truncate">
-            {form.name || "Your name"}
+            {form.fullName || "Your name"}
           </p>
           <p className="text-xs text-muted-foreground truncate">
             {form.brokerage || "Add your brokerage"}
@@ -270,14 +270,14 @@ function ProfileForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
-          id="profile-name"
+          id="profile-fullName"
           label="Full name"
           icon={User}
-          value={form.name}
-          onChange={(v) => update("name", v)}
-          placeholder="Jordan Miller"
+          value={form.fullName}
+          onChange={(v) => update("fullName", v)}
+          placeholder="Your full name"
           autoComplete="name"
-          error={errors.name}
+          error={errors.fullName}
           required
         />
         <Field
@@ -286,7 +286,7 @@ function ProfileForm() {
           icon={Building2}
           value={form.brokerage}
           onChange={(v) => update("brokerage", v)}
-          placeholder="AgentDesk Realty"
+          placeholder="Your brokerage name"
           autoComplete="organization"
           error={errors.brokerage}
         />
@@ -296,7 +296,7 @@ function ProfileForm() {
           icon={Phone}
           value={form.phone}
           onChange={(v) => update("phone", v)}
-          placeholder="(614) 555-0142"
+          placeholder="(555) 123-4567"
           type="tel"
           autoComplete="tel"
           error={errors.phone}
@@ -307,7 +307,7 @@ function ProfileForm() {
           icon={Mail}
           value={form.email}
           onChange={(v) => update("email", v)}
-          placeholder="jordan@agentdesk.app"
+          placeholder="your@email.com"
           type="email"
           autoComplete="email"
           error={errors.email}
