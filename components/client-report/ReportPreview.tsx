@@ -13,24 +13,21 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn, formatCurrency, formatNumber, formatDate } from "@/lib/utils";
+import { useAgentBranding } from "@/context/AgentBrandingContext";
 import type { Comparison, ComparedProperty } from "@/types";
-import type { AgentBranding } from "@/app/client-report/page";
 
 export interface ReportPreviewProps {
   comparison: Comparison | null;
-  branding: AgentBranding;
+  branding?: {
+    fullName?: string;
+    phone?: string;
+    email?: string;
+    brokerage?: string;
+  };
   clientName: string;
 }
-
-const PLACEHOLDER_BRANDING: AgentBranding = {
-  name: "Your Name",
-  phone: "",
-  email: "",
-  brokerage: "AgentDesk Realty",
-};
 
 interface EnrichedProperty extends ComparedProperty {
   price?: number | null;
@@ -170,15 +167,16 @@ function PropertyBlock({
 
 function ReportPreview({
   comparison,
-  branding,
+  branding: brandingProp,
   clientName,
 }: ReportPreviewProps) {
-  const safeBranding: AgentBranding = {
-    name: branding?.name || PLACEHOLDER_BRANDING.name,
-    phone: branding?.phone ?? PLACEHOLDER_BRANDING.phone,
-    email: branding?.email ?? PLACEHOLDER_BRANDING.email,
-    brokerage: branding?.brokerage || PLACEHOLDER_BRANDING.brokerage,
-  };
+  const { branding: contextBranding } = useAgentBranding();
+  const branding = brandingProp ?? contextBranding;
+
+  const agentName = branding?.fullName || "Your Name";
+  const agentPhone = branding?.phone || "";
+  const agentEmail = branding?.email || "";
+  const agentBrokerage = branding?.brokerage || "AgentDesk Realty";
   const safeClientName = clientName?.trim() || "your client";
 
   const [notesMap, setNotesMap] = React.useState<Record<string, string>>({});
@@ -230,9 +228,9 @@ function ReportPreview({
       navigator.clipboard
         .writeText(url.toString())
         .then(() => toast.success("Shareable link copied"))
-        .catch(() => toast.error("Couldn’t copy link"));
+        .catch(() => toast.error("Couldn't copy link"));
     } catch {
-      toast.error("Couldn’t copy link");
+      toast.error("Couldn't copy link");
     }
   }
 
@@ -276,7 +274,7 @@ function ReportPreview({
         <header className="report-header flex flex-col gap-6 border-b border-border pb-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.22em] text-primary font-semibold">
-              {safeBranding.brokerage}
+              {agentBrokerage}
             </p>
             <h1 className="font-display text-4xl md:text-5xl font-semibold tracking-tight text-foreground mt-2">
               Property Comparison Report
@@ -293,24 +291,24 @@ function ReportPreview({
 
           <div className="rounded-md border border-border bg-muted/30 p-4 text-sm space-y-1.5 min-w-[220px]">
             <p className="font-display text-base font-semibold tracking-tight text-foreground">
-              {safeBranding.name}
+              {agentName}
             </p>
-            {safeBranding.brokerage && (
+            {agentBrokerage && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Building2 className="h-3 w-3" aria-hidden="true" />
-                {safeBranding.brokerage}
+                {agentBrokerage}
               </p>
             )}
-            {safeBranding.phone && (
+            {agentPhone && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Phone className="h-3 w-3" aria-hidden="true" />
-                {safeBranding.phone}
+                {agentPhone}
               </p>
             )}
-            {safeBranding.email && (
+            {agentEmail && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Mail className="h-3 w-3" aria-hidden="true" />
-                {safeBranding.email}
+                {agentEmail}
               </p>
             )}
           </div>
@@ -344,11 +342,11 @@ function ReportPreview({
           </p>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <span className="font-display text-sm font-semibold tracking-tight text-foreground">
-              {safeBranding.name}
-              {safeBranding.brokerage ? ` · ${safeBranding.brokerage}` : ""}
+              {agentName}
+              {agentBrokerage ? ` · ${agentBrokerage}` : ""}
             </span>
             <span className="tabular-nums">
-              {[safeBranding.phone, safeBranding.email]
+              {[agentPhone, agentEmail]
                 .filter(Boolean)
                 .join(" · ")}
             </span>
