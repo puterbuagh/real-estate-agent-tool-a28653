@@ -17,6 +17,15 @@ export interface ZillowDiagnosticDetails {
   bestConfidenceScore?: number;
 }
 
+export interface ValuationResult {
+  estimate: number;
+  variancePct: number;
+  varianceLow: number;
+  varianceHigh: number;
+  confidence: 'high' | 'medium' | 'low';
+  compCount: number;
+}
+
 /**
  * Property record returned by lib/attom.ts.
  * Field name retained as `ZillowProperty` for backward compatibility with the
@@ -32,6 +41,7 @@ export interface ZillowDiagnosticDetails {
  *  - `propertySubType`: mapped from summary.propsubtype.
  *  - `daysOnMarket` / `photo`: ATTOM does not provide active listing data, so
  *    these will be null. UI components should gracefully degrade.
+ *  - `agentDeskValuation`: optional calculated estimate from lib/valuation.ts
  */
 export interface ZillowProperty {
   zpid: string | null;
@@ -64,6 +74,7 @@ export interface ZillowProperty {
     | "timeout"
     | "unknown";
   diagnosticDetails?: ZillowDiagnosticDetails;
+  agentDeskValuation?: ValuationResult | null;
 }
 
 export interface ComparisonProperty {
