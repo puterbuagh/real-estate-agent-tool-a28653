@@ -26,6 +26,10 @@ export interface ZillowDiagnosticDetails {
  *  - `price` / `zestimate`: ATTOM AVM value (falls back to market assessed value).
  *  - `lastSoldPrice` / `lastSoldDate`: most recent record from saleshistory/detail.
  *  - `taxAssessedValue`: ATTOM assessment.assessed.assdttlvalue.
+ *  - `estimatedValue`: ATTOM AVM amount.value (current estimated market value).
+ *  - `yearBuilt`: mapped from building.summary.yearbuilt.
+ *  - `lotSize`: mapped from lot.lotsize1 or lot.lotsize2 (numeric sqft).
+ *  - `propertySubType`: mapped from summary.propsubtype.
  *  - `daysOnMarket` / `photo`: ATTOM does not provide active listing data, so
  *    these will be null. UI components should gracefully degrade.
  */
@@ -37,14 +41,16 @@ export interface ZillowProperty {
   bedrooms: number | null;
   bathrooms: number | null;
   livingArea: number | null;
-  lotSize: number | string | null;
+  lotSize: number | null;
   yearBuilt: number | null;
   propertyType: string | null;
+  propertySubType: string | null;
   daysOnMarket: number | null;
   pricePerSqft: number | null;
   lastSoldPrice: number | null;
   lastSoldDate: string | null;
   taxAssessedValue: number | null;
+  estimatedValue: number | null;
   photo: string | null;
   status: "ok" | "no_data" | "error";
   errorMessage?: string;
@@ -68,14 +74,16 @@ export interface ComparisonProperty {
   bedrooms: number | null;
   bathrooms: number | null;
   livingArea: number | null;
-  lotSize: number | string | null;
+  lotSize: number | null;
   yearBuilt: number | null;
   propertyType: string | null;
+  propertySubType: string | null;
   daysOnMarket: number | null;
   pricePerSqft: number | null;
   lastSoldPrice: number | null;
   lastSoldDate: string | null;
   taxAssessedValue: number | null;
+  estimatedValue: number | null;
   photo: string | null;
 }
 
