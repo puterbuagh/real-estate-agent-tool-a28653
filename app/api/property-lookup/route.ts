@@ -3,7 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { fetchPropertyByAddress, fetchComparableSales } from "@/lib/attom";
 import { createHash } from "crypto";
 import { calculateAgentDeskEstimate } from "@/lib/valuation";
-import type { ZillowProperty, ValuationResult } from "@/types";
+import type { ZillowProperty, ValuationResult, ValuationInputs, PropertyOverrides } from "@/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -183,26 +183,77 @@ function invalidCoordsProperty(address: string): ZillowProperty {
   );
 }
 
+function hashAddress(address: string): string {
+  return createHash("sha256")
+    .update(address.toLowerCase().trim())
+    .digest("hex");
+}
+
+async function loadPropertyOverrides(
+  userId: string,
+  addressHash: string
+): Promise<PropertyOverrides | null> {
+  const supabase = createServerClient();
+  if (!supabase || userId === "anonymous") return null;
+
+  try {
+    const { data } = await supabase
+      .from("property_overrides")
+      .select("overrides")
+      .eq("user_id", userId)
+      .eq("address_hash", addressHash)
+      .single();
+
+    if (data?.overrides) {
+      return data.overrides as PropertyOverrides;
+    }
+  } catch (err) {
+    console.warn("[property-lookup] failed to load overrides:", err);
+  }
+
+  return null;
+}
+
+function applyOverrides(
+  property: ZillowProperty,
+  overrides: PropertyOverrides | null
+): ZillowProperty {
+  if (!overrides) return property;
+
+  return {
+    ...property,
+    bedrooms: overrides.bedrooms ?? property.bedrooms,
+    bathrooms: overrides.bathrooms ?? property.bathrooms,
+    livingArea: overrides.livingArea ?? property.livingArea,
+    yearBuilt: overrides.yearBuilt ?? property.yearBuilt,
+    propertySubType: overrides.propertySubType ?? property.propertySubType,
+    lotSize: overrides.lotSize ?? property.lotSize,
+    overrides,
+  };
+}
+
 async function calculateValuation(
   property: ZillowProperty,
   address: string,
   latitude: number,
-  longitude: number
-): Promise<ValuationResult | null> {
+  longitude: number,
+  userId: string
+): Promise<{
+  valuation: ValuationResult | null;
+  valuationInputs: ValuationInputs | null;
+}> {
   if (
     !property.lastSoldPrice ||
     !property.lastSoldDate ||
     !property.livingArea
   ) {
-    return null;
+    return { valuation: null, valuationInputs: null };
   }
 
   const supabase = createServerClient();
-  if (!supabase) return null;
+  if (!supabase) return { valuation: null, valuationInputs: null };
 
-  const addressHash = createHash("sha256")
-    .update(address.toLowerCase().trim())
-    .digest("hex");
+  const addressHash = hashAddress(address);
 
   try {
     const { data: cached } = await supabase
@@ -213,7 +264,7 @@ async function calculateValuation(
       .single();
 
     if (cached) {
-      return {
+      const valuation: ValuationResult = {
         estimate: Number(cached.agentdesk_estimate),
         variancePct: Number(cached.variance_pct),
         varianceLow: Number(cached.variance_low),
@@ -221,6 +272,12 @@ async function calculateValuation(
         confidence: cached.confidence as "high" | "medium" | "low",
         compCount: cached.comp_count,
       };
+
+      const valuationInputs: ValuationInputs | null = cached.inputs
+        ? (cached.inputs as ValuationInputs)
+        : null;
+
+      return { valuation, valuationInputs };
     }
   } catch (err) {
     console.warn("[property-lookup] cache check failed:", err);
@@ -241,13 +298,15 @@ async function calculateValuation(
   const comps = await fetchComparableSales(latitude, longitude, 0.5);
   console.log(`[property-lookup] fetched ${comps.length} comps for valuation`);
 
-  const valuation = calculateAgentDeskEstimate({
+  const valuationInputs: ValuationInputs = {
     lastSalePrice: property.lastSoldPrice,
     lastSaleDate: property.lastSoldDate,
     subjectSqft: property.livingArea,
     comps,
     currentMortgageRate,
-  });
+  };
+
+  const valuation = calculateAgentDeskEstimate(valuationInputs);
 
   try {
     await supabase.from("property_valuations").upsert({
@@ -259,13 +318,7 @@ async function calculateValuation(
       variance_high: valuation.varianceHigh,
       confidence: valuation.confidence,
       comp_count: valuation.compCount,
-      inputs: {
-        lastSalePrice: property.lastSoldPrice,
-        lastSaleDate: property.lastSoldDate,
-        sqft: property.livingArea,
-        compCount: comps.length,
-        mortgageRate: currentMortgageRate,
-      },
+      inputs: valuationInputs,
       calculated_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     });
@@ -273,7 +326,7 @@ async function calculateValuation(
     console.warn("[property-lookup] cache upsert failed:", err);
   }
 
-  return valuation;
+  return { valuation, valuationInputs };
 }
 
 export async function GET(req: NextRequest) {
@@ -353,7 +406,7 @@ export async function GET(req: NextRequest) {
   );
 
   try {
-    const property = await fetchPropertyByAddress(
+    let property = await fetchPropertyByAddress(
       address.trim(),
       latitude,
       longitude
@@ -370,18 +423,28 @@ export async function GET(req: NextRequest) {
     );
 
     let agentDeskValuation: ValuationResult | null = null;
+    let valuationInputs: ValuationInputs | null = null;
+
     if (property.status === "ok") {
-      agentDeskValuation = await calculateValuation(
+      const addressHash = hashAddress(address.trim());
+      const overrides = await loadPropertyOverrides(auth.userId, addressHash);
+      property = applyOverrides(property, overrides);
+
+      const valuationData = await calculateValuation(
         property,
         address.trim(),
         latitude,
-        longitude
+        longitude,
+        auth.userId
       );
+      agentDeskValuation = valuationData.valuation;
+      valuationInputs = valuationData.valuationInputs;
     }
 
     const enrichedProperty = {
       ...property,
       agentDeskValuation,
+      valuationInputs,
     };
 
     console.log(
@@ -570,7 +633,7 @@ export async function POST(req: NextRequest) {
             item.address
           )}" lat=${item.latitude} lng=${item.longitude}`
         );
-        const result = await fetchPropertyByAddress(
+        let result = await fetchPropertyByAddress(
           item.address,
           item.latitude,
           item.longitude
@@ -589,18 +652,28 @@ export async function POST(req: NextRequest) {
         );
 
         let agentDeskValuation: ValuationResult | null = null;
+        let valuationInputs: ValuationInputs | null = null;
+
         if (result.status === "ok") {
-          agentDeskValuation = await calculateValuation(
+          const addressHash = hashAddress(item.address);
+          const overrides = await loadPropertyOverrides(auth.userId, addressHash);
+          result = applyOverrides(result, overrides);
+
+          const valuationData = await calculateValuation(
             result,
             item.address,
             item.latitude,
-            item.longitude
+            item.longitude,
+            auth.userId
           );
+          agentDeskValuation = valuationData.valuation;
+          valuationInputs = valuationData.valuationInputs;
         }
 
         return {
           ...result,
           agentDeskValuation,
+          valuationInputs,
         };
       })
     );
