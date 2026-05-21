@@ -6,6 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const SUPABASE_SCHEMA = process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "public";
+
 async function requireUser(): Promise<
   { ok: true; userId: string } | { ok: false; response: NextResponse }
 > {
@@ -69,6 +71,7 @@ async function requireUser(): Promise<
 
 export async function POST(req: NextRequest) {
   console.log("[property-overrides POST] Request received");
+  console.log("[property-overrides POST] Using schema:", SUPABASE_SCHEMA);
   
   const auth = await requireUser();
   if (!auth.ok) {
@@ -142,6 +145,7 @@ export async function POST(req: NextRequest) {
     console.log("[property-overrides POST] Upsert data:", JSON.stringify(upsertData));
 
     const { data, error } = await supabase
+      .schema(SUPABASE_SCHEMA)
       .from("property_overrides")
       .upsert(upsertData, {
         onConflict: "user_id,address_hash",
@@ -190,6 +194,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   console.log("[property-overrides DELETE] Request received");
+  console.log("[property-overrides DELETE] Using schema:", SUPABASE_SCHEMA);
   
   const auth = await requireUser();
   if (!auth.ok) {
@@ -229,6 +234,7 @@ export async function DELETE(req: NextRequest) {
 
   try {
     const { data, error } = await supabase
+      .schema(SUPABASE_SCHEMA)
       .from("property_overrides")
       .delete()
       .eq("user_id", auth.userId)
