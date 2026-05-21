@@ -6,6 +6,15 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import type { ZillowProperty } from "@/types";
+import { useState } from "react";
+
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+if (!GOOGLE_MAPS_API_KEY) {
+  console.warn(
+    "[PropertyCard] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not defined. Street View images will fail with 403 errors. Add the key to your .env.local file."
+  );
+}
 
 export interface PropertyCardProps {
   property: ZillowProperty;
@@ -87,7 +96,14 @@ function cleanAddress(raw: string): { street: string; cityStateZip: string } {
   return { street, cityStateZip };
 }
 
+function getStreetViewUrl(address: string): string {
+  const encoded = encodeURIComponent(address);
+  return `https://maps.googleapis.com/maps/api/streetview?size=600x300&location=${encoded}&key=${GOOGLE_MAPS_API_KEY}&fov=90&pitch=0`;
+}
+
 function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCountdownSec }: PropertyCardProps) {
+  const [imageError, setImageError] = useState(false);
+
   if (property.status === "no_data") {
     const { street } = cleanAddress(property.address);
     return (
@@ -145,22 +161,25 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
   const headlinePrice = property.price ?? property.zestimate ?? property.lastSoldPrice;
   const { street: streetAddress, cityStateZip } = cleanAddress(property.address);
 
-  // AVM fallback logic: show EITHER estimatedValue OR lastSoldPrice with date, not both
   const shouldShowEstimatedValue = property.estimatedValue !== null;
   const shouldShowLastSold = !shouldShowEstimatedValue && property.lastSoldPrice !== null;
+
+  const streetViewUrl = getStreetViewUrl(property.address);
+  const imageSource = streetViewUrl || property.photo;
+  const shouldShowImage = !imageError;
 
   return (
     <Card className="overflow-hidden flex flex-col group hover:border-primary/40 hover:shadow-md transition-all duration-200">
       <div className="relative h-44 w-full bg-muted">
-        {property.photo ? (
+        {shouldShowImage ? (
           <>
             <Image
-              src={property.photo}
+              src={imageSource}
               alt={streetAddress}
               fill
               sizes="(max-width: 768px) 100vw, 33vw"
               className="object-cover"
-              unoptimized
+              onError={() => setImageError(true)}
             />
             <div
               aria-hidden="true"
@@ -186,7 +205,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           )}
         </div>
 
-        {property.photo && (
+        {shouldShowImage && (
           <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none">
             <p className="font-display text-xs font-medium text-white/95 line-clamp-2 drop-shadow-md">
               {streetAddress}
@@ -201,7 +220,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
       </div>
 
       <div className="flex flex-1 flex-col p-5">
-        {!property.photo && (
+        {!shouldShowImage && (
           <>
             <p className="font-display text-xs font-medium text-foreground line-clamp-2">
               {streetAddress}
@@ -214,7 +233,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           </>
         )}
 
-        <div className={cn(!property.photo && "mt-2")}>
+        <div className={cn(!shouldShowImage && "mt-2")}>
           {headlinePrice !== null && (
             <p className="font-display text-3xl font-semibold tracking-tight text-foreground tabular-nums">
               {formatCurrency(headlinePrice)}
