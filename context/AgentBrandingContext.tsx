@@ -308,5 +308,5 @@ export function useAgentBranding(): AgentBrandingContextValue {
   return ctx;
 }
 
-export { DEFAULT_BRANDING, deriveInitials };
+export { DEFAULT_BRANDING, deriveInitials, AgentBrandingProvider };
 export default AgentBrandingProvider;
