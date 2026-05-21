@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createServerClient } from "@/lib/supabase/server";
 import { fetchPropertyByAddress, fetchComparableSales } from "@/lib/attom";
 import { createHash } from "crypto";
 import { calculateAgentDeskEstimate } from "@/lib/valuation";
@@ -43,7 +43,7 @@ function checkRateLimit(userId: string): { ok: boolean; retryAfterSec: number } 
 async function requireUser(): Promise<
   { ok: true; userId: string } | { ok: false; response: NextResponse }
 > {
-  const supabase = createSupabaseServerClient();
+  const supabase = createServerClient();
   if (!supabase) {
     return { ok: true, userId: "anonymous" };
   }
@@ -197,7 +197,7 @@ async function calculateValuation(
     return null;
   }
 
-  const supabase = createSupabaseServerClient();
+  const supabase = createServerClient();
   if (!supabase) return null;
 
   const addressHash = createHash("sha256")
