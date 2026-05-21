@@ -26,6 +26,27 @@ export interface ValuationResult {
   compCount: number;
 }
 
+export interface ValuationInputs {
+  lastSalePrice: number;
+  lastSaleDate: string;
+  subjectSqft: number;
+  comps: Array<{
+    salePrice: number;
+    saleDate: string;
+    sqft: number;
+  }>;
+  currentMortgageRate: number;
+}
+
+export interface PropertyOverrides {
+  bedrooms?: number;
+  bathrooms?: number;
+  livingArea?: number;
+  yearBuilt?: number;
+  propertySubType?: string;
+  lotSize?: number;
+}
+
 /**
  * Property record returned by lib/attom.ts.
  * Field name retained as `ZillowProperty` for backward compatibility with the
@@ -42,6 +63,8 @@ export interface ValuationResult {
  *  - `daysOnMarket` / `photo`: ATTOM does not provide active listing data, so
  *    these will be null. UI components should gracefully degrade.
  *  - `agentDeskValuation`: optional calculated estimate from lib/valuation.ts
+ *  - `valuationInputs`: data needed for client-side recalculation
+ *  - `overrides`: agent-edited values that override ATTOM data
  */
 export interface ZillowProperty {
   zpid: string | null;
@@ -75,6 +98,8 @@ export interface ZillowProperty {
     | "unknown";
   diagnosticDetails?: ZillowDiagnosticDetails;
   agentDeskValuation?: ValuationResult | null;
+  valuationInputs?: ValuationInputs | null;
+  overrides?: PropertyOverrides;
 }
 
 export interface ComparisonProperty {
