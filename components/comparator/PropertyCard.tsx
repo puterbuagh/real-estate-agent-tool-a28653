@@ -101,6 +101,14 @@ function getStreetViewUrl(address: string): string {
   return `https://maps.googleapis.com/maps/api/streetview?size=600x300&location=${encoded}&key=${GOOGLE_MAPS_API_KEY}&fov=90&pitch=0`;
 }
 
+function formatLotSize(lotSize: number): string {
+  if (lotSize > 100) {
+    const acres = lotSize / 43560;
+    return `${acres.toFixed(2)} acres`;
+  }
+  return `${lotSize.toFixed(2)} acres`;
+}
+
 function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCountdownSec }: PropertyCardProps) {
   const [imageError, setImageError] = useState(false);
 
@@ -108,14 +116,16 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
     const { street } = cleanAddress(property.address);
     return (
       <Card className="overflow-hidden border-[hsl(38_92%_75%)] bg-[hsl(48_100%_97%)]">
-        <div className="p-5 flex flex-col items-start gap-2">
-          <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[hsl(38_92%_88%)] text-[hsl(35_85%_35%)]">
+        <div className="p-6 text-center">
+          <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[hsl(38_92%_88%)] text-[hsl(35_85%_35%)] mb-2">
             <AlertTriangle className="h-4 w-4" aria-hidden="true" />
           </div>
-          <p className="font-display text-sm font-semibold text-foreground">No data found</p>
-          <p className="text-xs text-muted-foreground break-words">
-            We couldn&apos;t find a record for{" "}
-            <span className="font-medium text-foreground">{street}</span>. Double-check the address and try again.
+          <p className="font-display text-sm font-semibold text-foreground">No data available</p>
+          <p className="text-xs text-muted-foreground break-words mt-1">
+            ATTOM has no record for this address.
+          </p>
+          <p className="text-xs text-muted-foreground/80 mt-2 break-words">
+            {street}
           </p>
         </div>
       </Card>
@@ -162,7 +172,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
   const { street: streetAddress, cityStateZip } = cleanAddress(property.address);
 
   const shouldShowEstimatedValue = property.estimatedValue !== null;
-  const shouldShowLastSold = !shouldShowEstimatedValue && property.lastSoldPrice !== null;
+  const shouldShowLastSold = property.lastSoldPrice !== null;
 
   const streetViewUrl = getStreetViewUrl(property.address);
   const imageSource = streetViewUrl || property.photo;
@@ -293,7 +303,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           {property.lotSize !== null && (
             <MetricRow
               label="Lot size"
-              value={`${property.lotSize.toLocaleString()} sqft`}
+              value={formatLotSize(property.lotSize)}
             />
           )}
           {property.taxAssessedValue !== null && (
@@ -308,6 +318,43 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
               label="Property type"
               value={property.propertyType}
             />
+          )}
+
+          {property.agentDeskValuation && (
+            <>
+              <div className="border-t border-border my-2" />
+
+              <div className="flex justify-between items-center py-1.5">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  AgentDesk Estimate
+                  <span
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                      property.agentDeskValuation.confidence === "high" &&
+                        "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+                      property.agentDeskValuation.confidence === "medium" &&
+                        "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+                      property.agentDeskValuation.confidence === "low" &&
+                        "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                    )}
+                  >
+                    {property.agentDeskValuation.confidence}
+                  </span>
+                </span>
+                <span className="text-xs font-semibold font-display tabular-nums">
+                  {formatCurrency(property.agentDeskValuation.estimate)}
+                </span>
+              </div>
+
+              <div className="flex justify-between py-1.5">
+                <span className="text-xs text-muted-foreground">Estimate range</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {formatCurrency(property.agentDeskValuation.varianceLow)}
+                  {" — "}
+                  {formatCurrency(property.agentDeskValuation.varianceHigh)}
+                </span>
+              </div>
+            </>
           )}
         </div>
       </div>
