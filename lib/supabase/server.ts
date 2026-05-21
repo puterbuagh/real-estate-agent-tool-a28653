@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient as _createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 function hasUsableConfig(): { url: string; anon: string } | null {
@@ -47,7 +47,7 @@ export function createSupabaseServerClient() {
       return null;
     }
 
-    return createServerClient(config.url, config.anon, {
+    return _createServerClient(config.url, config.anon, {
       db: {
         schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "public",
       },
@@ -81,6 +81,11 @@ export function createSupabaseServerClient() {
 }
 
 /**
+ * Alias export for legacy imports expecting createServerClient.
+ */
+export const createServerClient = createSupabaseServerClient;
+
+/**
  * Service-role server client. Use ONLY in trusted server contexts
  * (cron jobs, webhooks, admin routes). Never expose to the browser.
  * Returns null on failure instead of throwing.
@@ -90,7 +95,7 @@ export function createSupabaseServiceRoleClient() {
     const config = hasUsableServiceConfig();
     if (!config) return null;
 
-    return createServerClient(config.url, config.key, {
+    return _createServerClient(config.url, config.key, {
       db: {
         schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "public",
       },
