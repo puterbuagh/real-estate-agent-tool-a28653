@@ -63,6 +63,12 @@ function emptyProperty(
   errorType?: ErrorType,
   diagnosticDetails?: ZillowDiagnosticDetails
 ): ZillowProperty {
+  const fullDiagnostics: ZillowDiagnosticDetails = {
+    coordinatesUsed: diagnosticDetails?.coordinatesUsed,
+    candidatesReturned: diagnosticDetails?.candidatesReturned ?? 0,
+    bestConfidenceScore: diagnosticDetails?.bestConfidenceScore ?? 0,
+  };
+
   return {
     zpid: null,
     address,
@@ -74,16 +80,18 @@ function emptyProperty(
     lotSize: null,
     yearBuilt: null,
     propertyType: null,
+    propertySubType: null,
     daysOnMarket: null,
     pricePerSqft: null,
     lastSoldPrice: null,
     lastSoldDate: null,
     taxAssessedValue: null,
+    estimatedValue: null,
     photo: null,
     status,
     errorMessage,
     errorType: errorType as ZillowProperty["errorType"],
-    diagnosticDetails,
+    diagnosticDetails: fullDiagnostics,
   };
 }
 
@@ -303,8 +311,9 @@ function mergePropertyData(
   const baths = toNumber(rooms.bathstotal);
   const livingArea = toNumber(size.livingsize) ?? toNumber(size.universalsize);
   const lotSize = toNumber(lot.lotsize1) ?? toNumber(lot.lotsize2);
-  const yearBuilt = toNumber(summary.yearbuilt);
+  const yearBuilt = toNumber(summary.yearbuilt) ?? toNumber(building.yearbuilt);
   const propertyType = toStringOrNull(propSummary.proptype) ?? toStringOrNull(propSummary.propclass);
+  const propertySubType = toStringOrNull(propSummary.propsubtype);
 
   // Price priority: AVM > market value > last sold
   const price = avmValue ?? marketValue ?? lastSoldPrice;
@@ -339,11 +348,13 @@ function mergePropertyData(
     lotSize,
     yearBuilt,
     propertyType,
+    propertySubType,
     daysOnMarket: null,
     pricePerSqft,
     lastSoldPrice,
     lastSoldDate,
     taxAssessedValue,
+    estimatedValue: avmValue,
     photo: null,
     status: "ok",
     diagnosticDetails,
@@ -359,6 +370,8 @@ export async function fetchPropertyByAddress(
 
   const baseDiagnostics: ZillowDiagnosticDetails = {
     coordinatesUsed: { lat: latitude, lng: longitude },
+    candidatesReturned: 0,
+    bestConfidenceScore: 0,
   };
 
   console.log(`[attom fetchPropertyByAddress] ATTOM API KEY EXISTS: ${!!apiKey}`);
@@ -485,7 +498,7 @@ export async function fetchPropertyByAddress(
 
   const totalElapsed = Date.now() - start;
   console.log(
-    `[attom fetchPropertyByAddress] SUCCESS: attomId=${merged.zpid} price=${merged.price} avm=${avmResult.ok} sales=${salesResult.ok} (${totalElapsed}ms)`
+    `[attom fetchPropertyByAddress] SUCCESS: attomId=${merged.zpid} price=${merged.price} estimatedValue=${merged.estimatedValue} avm=${avmResult.ok} sales=${salesResult.ok} (${totalElapsed}ms)`
   );
 
   return merged;
