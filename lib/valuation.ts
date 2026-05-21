@@ -10,6 +10,8 @@
  * - High (10+ comps): ±5% variance
  * - Medium (5-9 comps): ±8% variance
  * - Low (<5 comps): ±12% variance
+ *
+ * This module is safe to import client-side — no Node.js-only dependencies.
  */
 
 export interface ValuationInputs {
