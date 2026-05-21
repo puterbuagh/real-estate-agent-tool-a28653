@@ -66,7 +66,7 @@ function SignupForm() {
         email: parsed.data.email,
         password: parsed.data.password,
         options: {
-          data: { name: parsed.data.name },
+          data: { fullName: parsed.data.name },
           emailRedirectTo:
             typeof window !== "undefined"
               ? `${window.location.origin}/auth/callback`
@@ -87,7 +87,7 @@ function SignupForm() {
           .upsert(
             {
               id: userId,
-              name: parsed.data.name,
+              full_name: parsed.data.name,
               email: parsed.data.email,
             },
             { onConflict: "id" }
@@ -147,7 +147,7 @@ function SignupForm() {
             autoComplete="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Jordan Miller"
+            placeholder="Your full name"
             className="pl-9"
             aria-invalid={!!errors.name}
             aria-describedby={errors.name ? "name-error" : undefined}
