@@ -1,6 +1,8 @@
 import { createServerClient as _createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+export const SUPABASE_SCHEMA = process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "agentdesk";
+
 function hasUsableConfig(): { url: string; anon: string } | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -49,7 +51,7 @@ export function createSupabaseServerClient() {
 
     return _createServerClient(config.url, config.anon, {
       db: {
-        schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "public",
+        schema: SUPABASE_SCHEMA,
       },
       cookies: {
         get(name: string) {
@@ -97,7 +99,7 @@ export function createSupabaseServiceRoleClient() {
 
     return _createServerClient(config.url, config.key, {
       db: {
-        schema: process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "public",
+        schema: SUPABASE_SCHEMA,
       },
       cookies: {
         get() {
