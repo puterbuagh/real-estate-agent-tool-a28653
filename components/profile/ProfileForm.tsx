@@ -183,7 +183,7 @@ function ProfileForm() {
     reader.readAsDataURL(file);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
@@ -198,15 +198,28 @@ function ProfileForm() {
     }
     setSubmitting(true);
     try {
-      setBranding({
+      console.log("[ProfileForm] Saving profile:", {
+        fullName: parsed.data.fullName,
+        brokerage: parsed.data.brokerage,
+        phone: parsed.data.phone,
+        email: parsed.data.email,
+        location: parsed.data.location,
+        hasLogo: !!parsed.data.logoUrl,
+      });
+
+      const updatedBranding: AgentBranding = {
         fullName: parsed.data.fullName,
         brokerage: parsed.data.brokerage || "",
         phone: parsed.data.phone || "",
         email: parsed.data.email || "",
         location: parsed.data.location || "",
-        logoUrl: parsed.data.logoUrl || "",
+        logoUrl: parsed.data.logoUrl || null,
         avatarUrl: branding.avatarUrl ?? null,
-      });
+      };
+
+      console.log("[ProfileForm] Calling setBranding with:", updatedBranding);
+      setBranding(updatedBranding);
+
       setErrors({});
       setDirty(false);
       setJustSaved(true);
@@ -216,6 +229,7 @@ function ProfileForm() {
       window.setTimeout(() => setJustSaved(false), 2400);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save profile";
+      console.error("[ProfileForm] Save failed:", err);
       toast.error(msg);
     } finally {
       setSubmitting(false);
