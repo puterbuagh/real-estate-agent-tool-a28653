@@ -9,6 +9,7 @@ import type { ZillowProperty } from "@/types";
 import { useState, useEffect } from "react";
 import { calculateAgentDeskEstimate } from "@/lib/valuation";
 import type { ValuationResult } from "@/types";
+import { toast } from "sonner";
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -210,15 +211,37 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
       });
 
       if (!res.ok) {
-        throw new Error("Save failed");
+        let errorData;
+        const contentType = res.headers.get("content-type");
+        
+        if (contentType && contentType.includes("application/json")) {
+          errorData = await res.json().catch(() => ({ error: 'Failed to parse error response' }));
+        } else {
+          const textBody = await res.text().catch(() => 'No response body');
+          errorData = { 
+            error: `Server returned ${res.status}: ${res.statusText}`,
+            details: textBody.substring(0, 200)
+          };
+        }
+        
+        console.error('[PropertyCard] save failed details:', {
+          status: res.status,
+          statusText: res.statusText,
+          error: errorData.error,
+          code: errorData.code,
+          details: errorData.details,
+          hint: errorData.hint,
+        });
+        throw new Error(errorData.error || `Save failed with status ${res.status}`);
       }
 
       setOverrides(changes);
       setEditMode(false);
-      alert("Property details saved");
+      toast.success("Property details saved");
     } catch (err) {
       console.error("[PropertyCard] save failed:", err);
-      alert("Failed to save changes");
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save changes';
+      toast.error(`Save failed: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -232,16 +255,34 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
       );
 
       if (!res.ok) {
-        throw new Error("Reset failed");
+        let errorData;
+        const contentType = res.headers.get("content-type");
+        
+        if (contentType && contentType.includes("application/json")) {
+          errorData = await res.json().catch(() => ({ error: 'Failed to parse error response' }));
+        } else {
+          const textBody = await res.text().catch(() => 'No response body');
+          errorData = { 
+            error: `Server returned ${res.status}: ${res.statusText}`,
+            details: textBody.substring(0, 200)
+          };
+        }
+        
+        console.error('[PropertyCard] reset failed details:', {
+          status: res.status,
+          error: errorData.error,
+        });
+        throw new Error(errorData.error || `Reset failed with status ${res.status}`);
       }
 
       setOverrides({});
       setEditValues({});
       setEditMode(false);
-      alert("Reset to original data");
+      toast.success("Reset to original data");
     } catch (err) {
       console.error("[PropertyCard] reset failed:", err);
-      alert("Failed to reset");
+      const errorMessage = err instanceof Error ? err.message : 'Failed to reset';
+      toast.error(`Reset failed: ${errorMessage}`);
     }
   };
 
