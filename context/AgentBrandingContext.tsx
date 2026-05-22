@@ -110,7 +110,16 @@ function rowToBranding(row: Record<string, unknown> | null | undefined): AgentBr
 async function persistToApi(branding: AgentBranding): Promise<void> {
   if (typeof window === "undefined") return;
   try {
-    await fetch("/api/profile", {
+    console.log("[AgentBrandingContext] Persisting to API:", {
+      fullName: branding.fullName,
+      brokerage: branding.brokerage,
+      phone: branding.phone,
+      email: branding.email,
+      location: branding.location,
+      hasLogo: !!branding.logoUrl,
+    });
+
+    const res = await fetch("/api/profile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -123,8 +132,18 @@ async function persistToApi(branding: AgentBranding): Promise<void> {
       }),
       credentials: "include",
     });
-  } catch {
-    // best-effort; localStorage remains source of truth on failure
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+      console.error("[AgentBrandingContext] API persist failed:", {
+        status: res.status,
+        error: errorData.error,
+      });
+    } else {
+      console.log("[AgentBrandingContext] Successfully persisted to API");
+    }
+  } catch (err) {
+    console.error("[AgentBrandingContext] API persist error:", err);
   }
 }
 
@@ -162,32 +181,50 @@ function AgentBrandingProvider({ children }: { children: ReactNode }) {
     async function loadFor(userId: string | null) {
       userIdRef.current = userId;
       if (!userId) {
+        console.log("[AgentBrandingContext] No user session, skipping Supabase fetch");
         setIsLoaded(true);
         return;
       }
       try {
+        console.log("[AgentBrandingContext] Fetching profile from Supabase for user:", userId);
         const { data, error } = await supabase!
           .from("agent_profiles")
           .select("full_name, email, brokerage, phone, location, logo_url")
           .eq("id", userId)
           .maybeSingle();
         if (cancelled) return;
-        if (!error && data) {
+        if (error) {
+          console.error("[AgentBrandingContext] Fetch error:", error);
+        } else if (data) {
+          console.log("[AgentBrandingContext] Fetched profile:", {
+            fullName: data.full_name,
+            brokerage: data.brokerage,
+            phone: data.phone,
+            email: data.email,
+            location: data.location,
+            hasLogo: !!data.logo_url,
+          });
           const next = rowToBranding(data as Record<string, unknown>);
           if (next) {
-            setBrandingState((prev) => ({
-              fullName: next.fullName || prev.fullName,
-              brokerage: next.brokerage || prev.brokerage,
-              phone: next.phone || prev.phone,
-              email: next.email || prev.email,
-              location: next.location || prev.location,
-              logoUrl: next.logoUrl ?? prev.logoUrl,
-              avatarUrl: next.avatarUrl ?? prev.avatarUrl,
-            }));
+            setBrandingState((prev) => {
+              const merged = {
+                fullName: next.fullName || prev.fullName,
+                brokerage: next.brokerage || prev.brokerage,
+                phone: next.phone || prev.phone,
+                email: next.email || prev.email,
+                location: next.location || prev.location,
+                logoUrl: next.logoUrl ?? prev.logoUrl,
+                avatarUrl: next.avatarUrl ?? prev.avatarUrl,
+              };
+              console.log("[AgentBrandingContext] Merged profile state:", merged);
+              return merged;
+            });
           }
+        } else {
+          console.log("[AgentBrandingContext] No profile found in Supabase");
         }
-      } catch {
-        // ignore — fall back to local storage values
+      } catch (err) {
+        console.error("[AgentBrandingContext] Unexpected fetch error:", err);
       } finally {
         if (!cancelled) setIsLoaded(true);
       }
@@ -211,9 +248,10 @@ function AgentBrandingProvider({ children }: { children: ReactNode }) {
     if (!hydrated) return;
     if (typeof window === "undefined") return;
     try {
+      console.log("[AgentBrandingContext] Writing to localStorage:", branding);
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(branding));
-    } catch {
-      // ignore quota / privacy-mode errors
+    } catch (err) {
+      console.error("[AgentBrandingContext] localStorage write error:", err);
     }
   }, [branding, hydrated]);
 
@@ -221,6 +259,7 @@ function AgentBrandingProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     function onStorage(e: StorageEvent) {
       if (e.key !== STORAGE_KEY) return;
+      console.log("[AgentBrandingContext] Storage event detected, reloading from localStorage");
       setBrandingState(readFromStorage());
     }
     window.addEventListener("storage", onStorage);
@@ -228,21 +267,31 @@ function AgentBrandingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateBranding = useCallback((next: Partial<AgentBranding>) => {
+    console.log("[AgentBrandingContext] updateBranding called with:", next);
     setBrandingState((prev) => {
       const merged = { ...prev, ...next };
-      void persistToApi(merged);
+      console.log("[AgentBrandingContext] Updated state:", merged);
+      persistToApi(merged).catch((err) => {
+        console.error("[AgentBrandingContext] persistToApi failed:", err);
+      });
       return merged;
     });
   }, []);
 
   const setBranding = useCallback((next: AgentBranding) => {
+    console.log("[AgentBrandingContext] setBranding called with:", next);
     setBrandingState(next);
-    void persistToApi(next);
+    persistToApi(next).catch((err) => {
+      console.error("[AgentBrandingContext] persistToApi failed:", err);
+    });
   }, []);
 
   const resetBranding = useCallback(() => {
+    console.log("[AgentBrandingContext] resetBranding called");
     setBrandingState(DEFAULT_BRANDING);
-    void persistToApi(DEFAULT_BRANDING);
+    persistToApi(DEFAULT_BRANDING).catch((err) => {
+      console.error("[AgentBrandingContext] persistToApi failed:", err);
+    });
   }, []);
 
   const saveBranding = useCallback(async (): Promise<{
@@ -255,6 +304,16 @@ function AgentBrandingProvider({ children }: { children: ReactNode }) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return { ok: false, error: "Not signed in" };
+
+    console.log("[AgentBrandingContext] saveBranding called, upserting:", {
+      userId: user.id,
+      fullName: branding.fullName,
+      email: branding.email,
+      brokerage: branding.brokerage,
+      phone: branding.phone,
+      location: branding.location,
+      hasLogo: !!branding.logoUrl,
+    });
 
     const payload = {
       id: user.id,
@@ -270,8 +329,14 @@ function AgentBrandingProvider({ children }: { children: ReactNode }) {
       .from("agent_profiles")
       .upsert(payload, { onConflict: "id" });
 
-    if (error) return { ok: false, error: error.message };
-    void persistToApi(branding);
+    if (error) {
+      console.error("[AgentBrandingContext] saveBranding upsert error:", error);
+      return { ok: false, error: error.message };
+    }
+    console.log("[AgentBrandingContext] saveBranding successful");
+    persistToApi(branding).catch((err) => {
+      console.error("[AgentBrandingContext] persistToApi failed:", err);
+    });
     return { ok: true };
   }, [branding]);
 
