@@ -11,7 +11,6 @@ export const maxDuration = 60;
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
-const SUPABASE_SCHEMA = process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "public";
 
 const rateBuckets = new Map<string, number[]>();
 
@@ -199,7 +198,6 @@ async function loadPropertyOverrides(
 
   try {
     const { data } = await supabase
-      .schema(SUPABASE_SCHEMA)
       .from("property_overrides")
       .select("overrides")
       .eq("user_id", userId)
@@ -259,7 +257,6 @@ async function calculateValuation(
 
   try {
     const { data: cached } = await supabase
-      .schema(SUPABASE_SCHEMA)
       .from("property_valuations")
       .select("*")
       .eq("address_hash", addressHash)
@@ -312,7 +309,7 @@ async function calculateValuation(
   const valuation = calculateAgentDeskEstimate(valuationInputs);
 
   try {
-    await supabase.schema(SUPABASE_SCHEMA).from("property_valuations").upsert({
+    await supabase.from("property_valuations").upsert({
       address_hash: addressHash,
       address,
       agentdesk_estimate: valuation.estimate,
