@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
+const SUPABASE_SCHEMA = process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "agentdesk";
+
 const updateProfileSchema = z.object({
   fullName: z.string().trim().max(80).optional().or(z.literal("")),
   brokerage: z.string().trim().max(120).optional().or(z.literal("")),
@@ -66,6 +68,7 @@ export async function POST(request: NextRequest) {
     });
 
     const { error: upsertError } = await supabase
+      .schema(SUPABASE_SCHEMA)
       .from("agent_profiles")
       .upsert(
         {
@@ -123,6 +126,7 @@ export async function GET(_request: NextRequest) {
     console.log("[profile/route] GET fetching for user:", user.id);
 
     const { data: profile, error: fetchError } = await supabase
+      .schema(SUPABASE_SCHEMA)
       .from("agent_profiles")
       .select("full_name, brokerage, phone, email, location, logo_url")
       .eq("id", user.id)
