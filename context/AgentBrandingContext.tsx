@@ -11,9 +11,10 @@ import {
   type ReactNode,
 } from "react";
 import type { AgentBranding } from "@/types";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import createSupabaseBrowserClient from "@/lib/supabase/client";
 
 const STORAGE_KEY = "agentdesk:agent-branding:v1";
+const SUPABASE_SCHEMA = process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "agentdesk";
 
 const DEFAULT_BRANDING: AgentBranding = {
   fullName: "",
