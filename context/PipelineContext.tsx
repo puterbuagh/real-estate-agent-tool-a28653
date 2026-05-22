@@ -15,9 +15,11 @@ import type {
   Comparison,
   ComparisonProperty,
 } from "@/types";
+import createSupabaseBrowserClient from "@/lib/supabase/client";
 
 const PIPELINE_KEY = "agentdesk:pipeline:v1";
 const COMPARISONS_KEY = "agentdesk:comparisons:v1";
+const SUPABASE_SCHEMA = process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || "agentdesk";
 
 export interface AddPipelineItemInput {
   address: string;
@@ -153,6 +155,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
   const [pipeline, setPipeline] = useState<PipelineItem[]>([]);
   const [comparisons, setComparisons] = useState<Comparison[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -175,8 +178,77 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    let cancelled = false;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) {
+        setUserId(data.user?.id ?? null);
+      }
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) {
+        setUserId(session?.user?.id ?? null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || !userId) return;
+
+    const supabase = createSupabaseBrowserClient();
+    let cancelled = false;
+
+    async function loadFromSupabase() {
+      try {
+        const { data: pipelineData } = await supabase
+          .from("pipeline_properties")
+          .select("*")
+          .eq("user_id", userId!)
+          .order("created_at", { ascending: false });
+
+        if (!cancelled && pipelineData) {
+          const normalized = pipelineData.map((row) => ({
+            id: row.id as string,
+            address: (row.address as string) ?? "",
+            stage: (row.stage as PipelineStage) ?? "Lead",
+            createdAt: (row.created_at as string) ?? new Date().toISOString(),
+            stageEnteredAt:
+              (row.stage_entered_at as string) ??
+              (row.created_at as string) ??
+              new Date().toISOString(),
+            price: (row.price as number | null) ?? null,
+            clientName: (row.client_name as string | null) ?? null,
+            notes: (row.notes as string) ?? "",
+          }));
+          setPipeline(normalized);
+        }
+      } catch (err) {
+        console.warn("[PipelineContext] Failed to load pipeline from Supabase:", err);
+      }
+    }
+
+    loadFromSupabase();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, userId]);
+
+  useEffect(() => {
     if (!hydrated) return;
-    writeLocalStorage(PIPELINE_KEY, JSON.stringify(pipeline));
+    if (typeof window === "undefined") return;
+    try {
+      writeLocalStorage(PIPELINE_KEY, JSON.stringify(pipeline));
+    } catch (err) {
+      console.error("[PipelineContext] localStorage write error:", err);
+    }
   }, [pipeline, hydrated]);
 
   useEffect(() => {
@@ -215,13 +287,52 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
         const next = [item, ...prev];
         return next;
       });
+
+      if (userId) {
+        const supabase = createSupabaseBrowserClient();
+        supabase
+          .from("pipeline_properties")
+          .insert({
+            id: item.id,
+            user_id: userId,
+            address: item.address,
+            stage: item.stage,
+            created_at: item.createdAt,
+            stage_entered_at: item.stageEnteredAt,
+            price: item.price,
+            client_name: item.clientName,
+            notes: item.notes,
+          })
+          .then(({ error }) => {
+            if (error) {
+              console.warn("[PipelineContext] Insert failed:", error);
+            }
+          });
+      }
     },
-    []
+    [userId]
   );
 
-  const removePipelineItem = useCallback((id: string) => {
-    setPipeline((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+  const removePipelineItem = useCallback(
+    (id: string) => {
+      setPipeline((prev) => prev.filter((p) => p.id !== id));
+
+      if (userId) {
+        const supabase = createSupabaseBrowserClient();
+        supabase
+          .from("pipeline_properties")
+          .delete()
+          .eq("id", id)
+          .eq("user_id", userId)
+          .then(({ error }) => {
+            if (error) {
+              console.warn("[PipelineContext] Delete failed:", error);
+            }
+          });
+      }
+    },
+    [userId]
+  );
 
   const updatePipelineStage = useCallback(
     (id: string, stage: PipelineStage) => {
@@ -229,16 +340,51 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
         prev.map((p) => {
           if (p.id !== id) return p;
           if (p.stage === stage) return p;
-          return { ...p, stage, stageEnteredAt: new Date().toISOString() };
+          const stageEnteredAt = new Date().toISOString();
+          return { ...p, stage, stageEnteredAt };
         })
       );
+
+      if (userId) {
+        const supabase = createSupabaseBrowserClient();
+        supabase
+          .from("pipeline_properties")
+          .update({
+            stage,
+            stage_entered_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq("user_id", userId)
+          .then(({ error }) => {
+            if (error) {
+              console.warn("[PipelineContext] Update stage failed:", error);
+            }
+          });
+      }
     },
-    []
+    [userId]
   );
 
-  const updatePipelineNotes = useCallback((id: string, notes: string) => {
-    setPipeline((prev) => prev.map((p) => (p.id === id ? { ...p, notes } : p)));
-  }, []);
+  const updatePipelineNotes = useCallback(
+    (id: string, notes: string) => {
+      setPipeline((prev) => prev.map((p) => (p.id === id ? { ...p, notes } : p)));
+
+      if (userId) {
+        const supabase = createSupabaseBrowserClient();
+        supabase
+          .from("pipeline_properties")
+          .update({ notes })
+          .eq("id", id)
+          .eq("user_id", userId)
+          .then(({ error }) => {
+            if (error) {
+              console.warn("[PipelineContext] Update notes failed:", error);
+            }
+          });
+      }
+    },
+    [userId]
+  );
 
   const addComparison = useCallback(
     (properties: ComparisonProperty[], label?: string): Comparison | null => {
