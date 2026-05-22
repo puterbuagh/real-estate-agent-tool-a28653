@@ -3,7 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
 const updateProfileSchema = z.object({
-  name: z.string().trim().max(80).optional().or(z.literal("")),
+  fullName: z.string().trim().max(80).optional().or(z.literal("")),
   brokerage: z.string().trim().max(120).optional().or(z.literal("")),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   email: z
@@ -26,8 +26,7 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      // Not signed in — the context still has localStorage as its source of
-      // truth, so we don't treat this as a hard error.
+      console.log("[profile/route] User not authenticated, skipping Supabase save");
       return NextResponse.json(
         { ok: false, error: "Unauthorized" },
         { status: 401 }
@@ -35,23 +34,43 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    console.log("[profile/route] POST received body:", {
+      fullName: body.fullName,
+      brokerage: body.brokerage,
+      phone: body.phone,
+      email: body.email,
+      location: body.location,
+      hasLogo: !!body.logoUrl,
+    });
+
     const parsed = updateProfileSchema.safeParse(body);
 
     if (!parsed.success) {
+      console.error("[profile/route] Validation failed:", parsed.error.issues);
       return NextResponse.json(
-        { ok: false, error: "Invalid profile data", details: parsed.error.issues },
+        { ok: false, error: "Invalid profile data", issues: parsed.error.issues },
         { status: 400 }
       );
     }
 
-    const { name, brokerage, phone, email, location, logoUrl } = parsed.data;
+    const { fullName, brokerage, phone, email, location, logoUrl } = parsed.data;
+
+    console.log("[profile/route] Upserting to agent_profiles:", {
+      userId: user.id,
+      fullName: fullName || "",
+      brokerage: brokerage || null,
+      phone: phone || null,
+      email: email || user.email || null,
+      location: location || null,
+      hasLogo: !!logoUrl,
+    });
 
     const { error: upsertError } = await supabase
       .from("agent_profiles")
       .upsert(
         {
           id: user.id,
-          name: name || "",
+          full_name: fullName || "",
           brokerage: brokerage || null,
           phone: phone || null,
           email: email || user.email || null,
@@ -63,13 +82,19 @@ export async function POST(request: NextRequest) {
       );
 
     if (upsertError) {
-      console.error("[profile/route] Upsert error:", upsertError);
+      console.error("[profile/route] Upsert error:", {
+        code: upsertError.code,
+        message: upsertError.message,
+        details: upsertError.details,
+        hint: upsertError.hint,
+      });
       return NextResponse.json(
-        { ok: false, error: "Failed to save profile" },
+        { ok: false, error: "Failed to save profile", details: upsertError.message },
         { status: 500 }
       );
     }
 
+    console.log("[profile/route] Profile saved successfully for user:", user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[profile/route] Unexpected error:", err);
@@ -95,9 +120,11 @@ export async function GET(_request: NextRequest) {
       );
     }
 
+    console.log("[profile/route] GET fetching for user:", user.id);
+
     const { data: profile, error: fetchError } = await supabase
       .from("agent_profiles")
-      .select("name, brokerage, phone, email, location, logo_url")
+      .select("full_name, brokerage, phone, email, location, logo_url")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -110,13 +137,23 @@ export async function GET(_request: NextRequest) {
     }
 
     if (!profile) {
+      console.log("[profile/route] No profile found for user:", user.id);
       return NextResponse.json({ ok: true, profile: null });
     }
+
+    console.log("[profile/route] Profile fetched:", {
+      fullName: profile.full_name,
+      brokerage: profile.brokerage,
+      phone: profile.phone,
+      email: profile.email,
+      location: profile.location,
+      hasLogo: !!profile.logo_url,
+    });
 
     return NextResponse.json({
       ok: true,
       profile: {
-        name: profile.name || "",
+        fullName: profile.full_name || "",
         brokerage: profile.brokerage || "",
         phone: profile.phone || "",
         email: profile.email || "",
