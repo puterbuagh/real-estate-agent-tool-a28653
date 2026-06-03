@@ -4,18 +4,22 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import createSupabaseBrowserClient from "@/lib/supabase/client";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 const DEMO_EMAIL = "demo@agentdesk.app";
 const DEMO_PASSWORD = "demo123";
 
-export default function DemoLoginForm() {
+interface DemoLoginFormProps {
+  isUnlocked: boolean;
+}
+
+export default function DemoLoginForm({ isUnlocked }: DemoLoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleDemoLogin = useCallback(async () => {
-    if (isLoading) return;
+    if (isLoading || !isUnlocked) return;
 
     setIsLoading(true);
 
@@ -54,7 +58,11 @@ export default function DemoLoginForm() {
       toast.error("An unexpected error occurred. Please try again.");
       setIsLoading(false);
     }
-  }, [isLoading, router]);
+  }, [isLoading, isUnlocked, router]);
+
+  if (!isUnlocked) {
+    return null;
+  }
 
   return (
     <div className="space-y-4">

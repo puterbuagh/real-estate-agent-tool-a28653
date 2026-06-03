@@ -1,14 +1,38 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { Building2 } from "lucide-react";
+import { Building2, Lock } from "lucide-react";
 import DemoLoginForm from "@/components/auth/DemoLoginForm";
 import AuthCard from "@/components/auth/AuthCard";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
-export const metadata = {
-  title: "Demo Login · AgentDesk",
-  description: "Try AgentDesk with a pre-populated demo account",
-};
+const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || "";
 
 export default function DemoPage() {
+  const [password, setPassword] = useState("");
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [error, setError] = useState("");
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!DEMO_PASSWORD) {
+      setError("Demo password not configured. Contact support.");
+      return;
+    }
+
+    if (password === DEMO_PASSWORD) {
+      setIsUnlocked(true);
+      setError("");
+    } else {
+      setError("Incorrect password. Please try again.");
+      setPassword("");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
@@ -36,14 +60,50 @@ export default function DemoPage() {
           <div className="space-y-6">
             <div className="space-y-2 text-center">
               <h1 className="text-2xl font-bold tracking-tight">
-                Try AgentDesk Demo
+                {isUnlocked ? "Try AgentDesk Demo" : "Demo Access"}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Explore the platform with a pre-populated account
+                {isUnlocked
+                  ? "Explore the platform with a pre-populated account"
+                  : "Enter the demo password to continue"}
               </p>
             </div>
 
-            <DemoLoginForm />
+            {!isUnlocked ? (
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="password"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Demo Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Enter demo password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="pl-10"
+                      autoFocus
+                    />
+                  </div>
+                  {error && (
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      {error}
+                    </p>
+                  )}
+                </div>
+
+                <Button type="submit" className="w-full" size="lg">
+                  Unlock Demo
+                </Button>
+              </form>
+            ) : (
+              <DemoLoginForm isUnlocked={isUnlocked} />
+            )}
 
             <div className="text-center text-sm text-muted-foreground">
               <p>
