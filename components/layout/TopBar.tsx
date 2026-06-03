@@ -78,4 +78,5 @@ function TopBar({ title = "Dashboard", onMenuClick }: TopBarProps) {
   );
 }
 
+export { TopBar };
 export default TopBar;

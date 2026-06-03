@@ -1,5 +1,3 @@
-"use client";
-
 import { Loader } from "@googlemaps/js-api-loader";
 
 // ---------------------------------------------------------------------------
@@ -88,7 +86,6 @@ export function loadGoogleMaps(): Promise<GoogleMapsLoadResult> {
       return { status: "missing_key", error: msg };
     }
 
-    // If the global google.maps.places is already present, just reuse it.
     if (
       (window as unknown as { google?: typeof google }).google?.maps?.places
         ?.Autocomplete
@@ -132,8 +129,6 @@ export function loadGoogleMaps(): Promise<GoogleMapsLoadResult> {
     }
   })();
 
-  // If we ended in a non-ready state, clear the in-flight promise so the next
-  // call can retry.
   loaderPromise
     .then((r) => {
       if (r.status !== "ready") {

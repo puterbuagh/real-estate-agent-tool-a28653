@@ -31,11 +31,8 @@ interface PropertyErrorCardProps {
   variant: ErrorVariant;
   message?: string;
   errorType?: ErrorType;
-  /** When provided, shows a Retry button. Receives the cooldown-aware handler. */
   onRetry?: () => void;
-  /** Number of retry attempts already made — drives exponential backoff cooldown. */
   retryAttempt?: number;
-  /** Diagnostic details from the lookup flow — displayed in dev/debugging. */
   diagnosticDetails?: {
     coordinatesUsed?: { lat: number; lng: number };
     candidatesReturned?: number;

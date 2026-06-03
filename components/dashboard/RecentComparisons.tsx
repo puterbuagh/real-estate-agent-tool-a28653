@@ -56,7 +56,7 @@ function RecentComparisons() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-      className="w-full max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+      className="w-full max-w-[calc(100vw-2rem)] md:max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
     >
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-gradient-to-r from-card to-muted/30 px-6 py-5">
         <div className="flex min-w-0 items-center gap-3">
@@ -107,10 +107,10 @@ function RecentComparisons() {
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-border text-left font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                <th className="px-6 py-3">Date</th>
-                <th className="px-6 py-3">Addresses</th>
-                <th className="px-6 py-3">Winner</th>
-                <th className="px-6 py-3 text-right">Action</th>
+                <th className="px-6 py-3 whitespace-nowrap">Date</th>
+                <th className="px-6 py-3 whitespace-nowrap">Addresses</th>
+                <th className="px-6 py-3 whitespace-nowrap">Winner</th>
+                <th className="px-6 py-3 text-right whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody>

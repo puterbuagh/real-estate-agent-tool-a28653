@@ -151,7 +151,7 @@ function writeLocalStorage(key: string, value: string): void {
   }
 }
 
-export function PipelineProvider({ children }: { children: ReactNode }) {
+function PipelineProvider({ children }: { children: ReactNode }) {
   const [pipeline, setPipeline] = useState<PipelineItem[]>([]);
   const [comparisons, setComparisons] = useState<Comparison[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -208,6 +208,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
     async function loadFromSupabase() {
       try {
         const { data: pipelineData } = await supabase
+          .schema(SUPABASE_SCHEMA)
           .from("pipeline_properties")
           .select("*")
           .eq("user_id", userId!)
@@ -291,6 +292,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
       if (userId) {
         const supabase = createSupabaseBrowserClient();
         supabase
+          .schema(SUPABASE_SCHEMA)
           .from("pipeline_properties")
           .insert({
             id: item.id,
@@ -320,6 +322,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
       if (userId) {
         const supabase = createSupabaseBrowserClient();
         supabase
+          .schema(SUPABASE_SCHEMA)
           .from("pipeline_properties")
           .delete()
           .eq("id", id)
@@ -348,6 +351,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
       if (userId) {
         const supabase = createSupabaseBrowserClient();
         supabase
+          .schema(SUPABASE_SCHEMA)
           .from("pipeline_properties")
           .update({
             stage,
@@ -372,6 +376,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
       if (userId) {
         const supabase = createSupabaseBrowserClient();
         supabase
+          .schema(SUPABASE_SCHEMA)
           .from("pipeline_properties")
           .update({ notes })
           .eq("id", id)
@@ -490,8 +495,9 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function usePipeline(): PipelineContextValue {
+function usePipeline(): PipelineContextValue {
   return useContext(PipelineContext);
 }
 
+export { PipelineProvider, usePipeline };
 export default PipelineProvider;

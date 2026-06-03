@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MapPin, Trash2, User, StickyNote, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { usePipeline } from "@/context/PipelineContext";
 import { cn, formatCurrency, daysBetween } from "@/lib/utils";
 import type { PipelineItem } from "@/types";
@@ -17,6 +18,8 @@ function PipelineCard({ item }: PipelineCardProps) {
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState(item.notes ?? "");
   const [isDragging, setIsDragging] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const stageRef = item.stageEnteredAt ?? item.createdAt;
   const days = daysBetween(stageRef);
@@ -32,21 +35,37 @@ function PipelineCard({ item }: PipelineCardProps) {
     setIsDragging(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (typeof window !== "undefined") {
       const ok = window.confirm(
         `Remove "${item.address}" from your pipeline?`
       );
       if (!ok) return;
     }
-    removePipelineItem(item.id);
-    toast.success("Removed from pipeline");
+    setDeleting(true);
+    try {
+      removePipelineItem(item.id);
+      toast.success("Removed from pipeline");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to remove item";
+      toast.error(msg);
+    } finally {
+      setDeleting(false);
+    }
   }
 
-  function handleNotesSave() {
-    updatePipelineNotes(item.id, notesDraft.trim());
-    toast.success("Notes saved");
-    setNotesOpen(false);
+  async function handleNotesSave() {
+    setSaving(true);
+    try {
+      updatePipelineNotes(item.id, notesDraft.trim());
+      toast.success("Notes saved");
+      setNotesOpen(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save notes";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -73,14 +92,18 @@ function PipelineCard({ item }: PipelineCardProps) {
             </p>
           )}
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={handleDelete}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+          loading={deleting}
+          disabled={deleting}
+          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
           aria-label="Remove from pipeline"
         >
           <Trash2 className="size-4" />
-        </button>
+        </Button>
       </div>
 
       {item.clientName && (
@@ -143,13 +166,17 @@ function PipelineCard({ item }: PipelineCardProps) {
             >
               Cancel
             </button>
-            <button
+            <Button
               type="button"
               onClick={handleNotesSave}
-              className="text-[11px] font-medium text-primary hover:text-primary/80"
+              loading={saving}
+              disabled={saving}
+              size="sm"
+              variant="ghost"
+              className="text-[11px] font-medium text-primary hover:text-primary/80 h-auto px-2 py-1"
             >
               Save
-            </button>
+            </Button>
           </div>
         </div>
       )}

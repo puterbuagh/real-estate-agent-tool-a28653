@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import { PipelineProvider } from '@/context/PipelineContext';
 import { AgentBrandingProvider } from '@/context/AgentBrandingContext';
 import AppShell from '@/components/layout/AppShell';
+import ErrorBoundary from '@/components/error/ErrorBoundary';
 
 export const metadata: Metadata = {
   title: 'AgentDesk — Real Estate Operating System',
@@ -29,21 +30,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
       <body className="overflow-x-hidden min-h-screen">
-        <AgentBrandingProvider>
-          <PipelineProvider>
-            <AppShell>{children}</AppShell>
-            <Toaster
-              position="bottom-right"
-              toastOptions={{
-                style: {
-                  background: 'var(--card)',
-                  color: 'var(--foreground)',
-                  border: '1px solid var(--border)',
-                },
-              }}
-            />
-          </PipelineProvider>
-        </AgentBrandingProvider>
+        <ErrorBoundary context="root">
+          <AgentBrandingProvider>
+            <PipelineProvider>
+              <AppShell>{children}</AppShell>
+              <Toaster
+                position="bottom-right"
+                toastOptions={{
+                  style: {
+                    background: 'var(--card)',
+                    color: 'var(--foreground)',
+                    border: '1px solid var(--border)',
+                  },
+                }}
+              />
+            </PipelineProvider>
+          </AgentBrandingProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

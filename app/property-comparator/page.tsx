@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import AddressInputs from "@/components/comparator/AddressInputs";
 import PropertyCard from "@/components/comparator/PropertyCard";
 import PropertySkeletonCard from "@/components/comparator/PropertySkeletonCard";
+import ComparisonTable from "@/components/comparator/ComparisonTable";
 import { usePipeline } from "@/context/PipelineContext";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import type { ZillowProperty, ComparisonProperty } from "@/types";
@@ -32,9 +33,7 @@ type Coords = { latitude: number; longitude: number } | null;
 function PropertyComparatorPage() {
   const { addComparison } = usePipeline();
   const [addresses, setAddresses] = useState<string[]>(["", ""]);
-  // Tracks which rows came from a confirmed Google Places selection.
   const [confirmedPlaces, setConfirmedPlaces] = useState<boolean[]>([false, false]);
-  // Stores lat/lng for each row, populated when Google Places confirms a selection.
   const [coordinates, setCoordinates] = useState<Coords[]>([null, null]);
   const [results, setResults] = useState<ZillowProperty[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -74,8 +73,6 @@ function PropertyComparatorPage() {
     [validIndices, addresses]
   );
 
-  // Inline soft-warning: any address row with text that wasn't confirmed via
-  // the Google Places dropdown. Without coordinates, the lookup will fail.
   const unconfirmedRows = useMemo(
     () =>
       addresses
@@ -133,7 +130,6 @@ function PropertyComparatorPage() {
 
   function handleChange(index: number, value: string) {
     setAddresses((prev) => prev.map((a, i) => (i === index ? value : a)));
-    // Manual edits invalidate any prior place confirmation + coordinates.
     setConfirmedPlaces((prev) => {
       if (!prev[index]) return prev;
       const next = [...prev];
@@ -148,9 +144,6 @@ function PropertyComparatorPage() {
     });
   }
 
-  // The autocomplete child emits the confirmed formatted address along with
-  // its latitude/longitude. We store all three so the API call downstream has
-  // exact coordinates to hit Zillow's bycoordinates endpoint.
   function handlePlaceSelected(
     index: number,
     formatted: string,
@@ -316,7 +309,6 @@ function PropertyComparatorPage() {
     const cooldownUntil = retryCooldowns[address] ?? 0;
     if (Date.now() < cooldownUntil) return;
 
-    // Find the original row to recover its coords.
     const rowIdx = addresses.findIndex((a) => a.trim() === address.trim());
     const coords = rowIdx >= 0 ? coordinates[rowIdx] ?? null : null;
     if (!coords) {
@@ -698,80 +690,7 @@ function PropertyComparatorPage() {
               transition={{ duration: 0.4, delay: 0.2, ease: "easeOut" }}
               className="print:hidden"
             >
-              <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Comparison table
-              </h2>
-              <Card className="overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/40 text-left font-display text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        <th className="px-4 py-3">Address</th>
-                        <th className="px-4 py-3 text-right">Price</th>
-                        <th className="px-4 py-3 text-right">Zestimate</th>
-                        <th className="px-4 py-3 text-right">Beds</th>
-                        <th className="px-4 py-3 text-right">Baths</th>
-                        <th className="px-4 py-3 text-right">Sqft</th>
-                        <th className="px-4 py-3 text-right">$/Sqft</th>
-                        <th className="px-4 py-3 text-right">Year</th>
-                        <th className="px-4 py-3 text-right">DOM</th>
-                        <th className="px-4 py-3 text-right">Last Sold</th>
-                        <th className="px-4 py-3 text-right">Tax Assessed</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {successful.map((p, idx) => (
-                        <tr
-                          key={`${p.zpid ?? p.address}-row-${idx}`}
-                          className={cn(
-                            "border-b border-border last:border-b-0 transition-colors hover:bg-primary/5",
-                            idx % 2 === 1
-                              ? "bg-gradient-to-r from-muted/40 to-muted/20"
-                              : "bg-background"
-                          )}
-                        >
-                          <td className="px-4 py-3 font-medium text-foreground max-w-[18rem] truncate">
-                            {p.address}
-                          </td>
-                          <td className="px-4 py-3 text-right font-display font-semibold tabular-nums">
-                            {formatCurrency(p.price)}
-                          </td>
-                          <td className="px-4 py-3 text-right font-display tabular-nums">
-                            {formatCurrency(p.zestimate)}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{p.bedrooms ?? "—"}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{p.bathrooms ?? "—"}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {p.livingArea ? p.livingArea.toLocaleString() : "—"}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {p.pricePerSqft ? `$${p.pricePerSqft.toLocaleString()}` : "—"}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{p.yearBuilt ?? "—"}</td>
-                          <td
-                            className={cn(
-                              "px-4 py-3 text-right tabular-nums",
-                              (p.daysOnMarket ?? 0) > 60 && "text-destructive font-semibold"
-                            )}
-                          >
-                            {p.daysOnMarket ?? "—"}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {p.lastSoldPrice
-                              ? `${formatCurrency(p.lastSoldPrice)}${
-                                  p.lastSoldDate ? ` · ${formatDate(p.lastSoldDate)}` : ""
-                                }`
-                              : "—"}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {formatCurrency(p.taxAssessedValue)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
+              <ComparisonTable properties={successful} />
             </motion.section>
           )}
 

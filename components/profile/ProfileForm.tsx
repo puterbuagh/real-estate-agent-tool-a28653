@@ -13,6 +13,7 @@ import {
   Save,
   RotateCcw,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -86,6 +87,7 @@ function Field({
   autoComplete,
   required,
   helpText,
+  disabled,
 }: {
   id: string;
   label: string;
@@ -98,6 +100,7 @@ function Field({
   autoComplete?: string;
   required?: boolean;
   helpText?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
@@ -114,6 +117,7 @@ function Field({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           autoComplete={autoComplete}
+          disabled={disabled}
           className={cn(
             "pl-9",
             error && "border-destructive focus-visible:ring-destructive"
@@ -155,6 +159,7 @@ function ProfileForm() {
   }, [branding]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+    if (submitting) return;
     setForm((prev) => ({ ...prev, [key]: value }));
     setDirty(true);
     setJustSaved(false);
@@ -185,6 +190,8 @@ function ProfileForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
+
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
       const next: Partial<Record<keyof FormState, string>> = {};
@@ -196,6 +203,7 @@ function ProfileForm() {
       toast.error("Please fix the highlighted fields.");
       return;
     }
+
     setSubmitting(true);
     try {
       console.log("[ProfileForm] Saving profile:", {
@@ -218,7 +226,10 @@ function ProfileForm() {
       };
 
       console.log("[ProfileForm] Calling setBranding with:", updatedBranding);
-      setBranding(updatedBranding);
+
+      // Await setBranding in case it returns a promise (Supabase sync).
+      // Even if it returns void, awaiting a non-thenable is safe.
+      await Promise.resolve(setBranding(updatedBranding));
 
       setErrors({});
       setDirty(false);
@@ -228,15 +239,23 @@ function ProfileForm() {
       });
       window.setTimeout(() => setJustSaved(false), 2400);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to save profile";
+      const isNetworkError =
+        err instanceof TypeError ||
+        (err instanceof Error && err.message.toLowerCase().includes("fetch"));
+      if (isNetworkError) {
+        toast.error("Network error — check your connection and try again.");
+      } else {
+        const msg = err instanceof Error ? err.message : "Failed to save profile";
+        toast.error(msg);
+      }
       console.error("[ProfileForm] Save failed:", err);
-      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   }
 
   function handleReset() {
+    if (submitting) return;
     if (typeof window !== "undefined") {
       const ok = window.confirm(
         "Reset your profile? This clears your saved branding from this browser."
@@ -293,6 +312,7 @@ function ProfileForm() {
           autoComplete="name"
           error={errors.fullName}
           required
+          disabled={submitting}
         />
         <Field
           id="profile-brokerage"
@@ -303,6 +323,7 @@ function ProfileForm() {
           placeholder="Your brokerage name"
           autoComplete="organization"
           error={errors.brokerage}
+          disabled={submitting}
         />
         <Field
           id="profile-phone"
@@ -314,6 +335,7 @@ function ProfileForm() {
           type="tel"
           autoComplete="tel"
           error={errors.phone}
+          disabled={submitting}
         />
         <Field
           id="profile-email"
@@ -325,6 +347,7 @@ function ProfileForm() {
           type="email"
           autoComplete="email"
           error={errors.email}
+          disabled={submitting}
         />
         <div className="sm:col-span-2">
           <Field
@@ -337,6 +360,7 @@ function ProfileForm() {
             autoComplete="address-level1"
             error={errors.location}
             helpText="Used to localize mortgage rates and market stats (e.g. Florida, Ohio, Texas)."
+            disabled={submitting}
           />
         </div>
       </div>
@@ -348,7 +372,10 @@ function ProfileForm() {
         <div className="flex flex-wrap items-center gap-3">
           <label
             htmlFor="profile-logo"
-            className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            className={cn(
+              "inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent",
+              submitting && "pointer-events-none opacity-50"
+            )}
           >
             <ImageIcon className="h-4 w-4" aria-hidden="true" />
             {form.logoUrl ? "Replace image" : "Upload image"}
@@ -359,12 +386,14 @@ function ProfileForm() {
             accept="image/*"
             className="sr-only"
             onChange={handleLogoUpload}
+            disabled={submitting}
           />
           {form.logoUrl && (
             <button
               type="button"
               onClick={() => update("logoUrl", "")}
-              className="text-xs font-medium text-muted-foreground hover:text-destructive"
+              disabled={submitting}
+              className="text-xs font-medium text-muted-foreground hover:text-destructive disabled:opacity-50"
             >
               Remove
             </button>
@@ -380,20 +409,41 @@ function ProfileForm() {
           type="button"
           variant="ghost"
           onClick={handleReset}
+          disabled={submitting}
           className="mr-auto text-muted-foreground hover:text-destructive"
         >
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
           Reset profile
         </Button>
-        {justSaved && !dirty && (
+        {submitting && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            Saving…
+          </span>
+        )}
+        {justSaved && !dirty && !submitting && (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-[hsl(var(--success))]">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
             Saved
           </span>
         )}
-        <Button type="submit" loading={submitting} disabled={submitting || !dirty}>
-          <Save className="h-4 w-4" aria-hidden="true" />
-          {isConfigured ? "Save changes" : "Save profile"}
+        <Button
+          type="submit"
+          loading={submitting}
+          disabled={submitting || !dirty}
+          aria-busy={submitting}
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4" aria-hidden="true" />
+              {isConfigured ? "Save changes" : "Save profile"}
+            </>
+          )}
         </Button>
       </div>
     </form>

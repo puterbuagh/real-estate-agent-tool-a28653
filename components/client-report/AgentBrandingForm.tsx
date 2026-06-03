@@ -5,16 +5,17 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { User, Phone, Mail, Building2, ExternalLink, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
 import { useAgentBranding } from "@/context/AgentBrandingContext";
 import type { AgentBranding } from "@/types";
 
 const PLACEHOLDER_BRANDING: AgentBranding = {
-  name: "",
+  fullName: "",
+  brokerage: "",
   phone: "",
   email: "",
-  brokerage: "",
-  logoUrl: "",
+  location: "",
+  logoUrl: null,
+  avatarUrl: null,
 };
 
 export interface AgentBrandingFormProps {
@@ -63,9 +64,7 @@ function Field({
  * AgentBrandingForm — wired to the global AgentBrandingContext.
  *
  * Edits propagate immediately to the Sidebar, Profile page, and every
- * surface that consumes useAgentBranding(). The optional `value` /
- * `onChange` props are kept for legacy callers but the context is the
- * source of truth.
+ * surface that consumes useAgentBranding().
  */
 function AgentBrandingForm({ value, onChange }: AgentBrandingFormProps) {
   const { branding, setBranding, isConfigured } = useAgentBranding();
@@ -84,7 +83,6 @@ function AgentBrandingForm({ value, onChange }: AgentBrandingFormProps) {
     setBranding(next);
     onChange?.(next);
 
-    // Debounced "saved" confirmation — feels alive without spamming toasts.
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setJustSaved(true);
@@ -116,8 +114,8 @@ function AgentBrandingForm({ value, onChange }: AgentBrandingFormProps) {
           id="agent-name"
           label="Agent name"
           icon={User}
-          value={safe.name ?? ""}
-          onChange={(v) => commit({ ...safe, name: v })}
+          value={safe.fullName ?? ""}
+          onChange={(v) => commit({ ...safe, fullName: v })}
           placeholder="Jordan Miller"
         />
         <Field

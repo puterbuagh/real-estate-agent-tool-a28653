@@ -346,9 +346,7 @@ function ReportPreview({
               {agentBrokerage ? ` · ${agentBrokerage}` : ""}
             </span>
             <span className="tabular-nums">
-              {[agentPhone, agentEmail]
-                .filter(Boolean)
-                .join(" · ")}
+              {[agentPhone, agentEmail].filter(Boolean).join(" · ")}
             </span>
           </div>
         </footer>

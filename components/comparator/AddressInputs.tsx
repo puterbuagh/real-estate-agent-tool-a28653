@@ -17,14 +17,6 @@ export interface AddressInputsProps {
   max?: number;
   modes?: AddressInputMode[];
   onModeChange?: (index: number, mode: AddressInputMode) => void;
-  /**
-   * Called when a Google Places suggestion is confirmed. Latitude and
-   * longitude are OPTIONAL from the consumer's perspective so that existing
-   * call sites which only consume the formatted address continue to compile
-   * unchanged. When a place is selected via Google, this component always
-   * provides both — but the parameters are typed as optional so older
-   * handlers `(idx, addr) => void` remain assignable.
-   */
   onPlaceSelected?: (
     index: number,
     formattedAddress: string,
@@ -222,9 +214,6 @@ function AddressInputs({
         if (input) {
           input.value = trimmed;
         }
-        // Prefer the place-aware callback. If the parent didn't wire it up,
-        // fall back to onChange so the address still propagates — but we lose
-        // coordinates in that case (parent should adopt onPlaceSelected).
         if (onPlaceSelectedRef.current) {
           try {
             onPlaceSelectedRef.current(idx, trimmed, lat, lng);

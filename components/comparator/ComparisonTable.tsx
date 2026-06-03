@@ -143,7 +143,7 @@ function ComparisonTable({ properties }: ComparisonTableProps) {
   ];
 
   return (
-    <section className="rounded-lg border border-border bg-card overflow-hidden">
+    <section className="w-full max-w-[calc(100vw-2rem)] md:max-w-full rounded-lg border border-border bg-card overflow-hidden">
       <header className="border-b border-border px-6 py-4">
         <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-medium">
           Scan view
@@ -155,8 +155,8 @@ function ComparisonTable({ properties }: ComparisonTableProps) {
           Every property, every metric \u2014 for fast scanning.
         </p>
       </header>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="w-full max-w-full overflow-x-auto">
+        <table className="w-full min-w-[1100px] text-sm">
           <thead>
             <tr className="border-b border-border bg-gradient-to-b from-muted/60 to-muted/20">
               {columns.map((c) => (

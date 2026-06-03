@@ -10,6 +10,8 @@ import { useState, useEffect } from "react";
 import { calculateAgentDeskEstimate } from "@/lib/valuation";
 import type { ValuationResult } from "@/types";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/Skeleton";
+import ErrorBoundary from "@/components/error/ErrorBoundary";
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -90,7 +92,7 @@ function MetricRow({
 
 function formatAddress(address: string): string {
   const parts = address.split(',').map(p => p.trim()).filter(Boolean);
-  const unique = parts.filter((part, index) => 
+  const unique = parts.filter((part, index) =>
     parts.findIndex(p => p.toLowerCase() === part.toLowerCase()) === index
   );
   return unique.join(', ');
@@ -122,8 +124,9 @@ function formatLotSize(lotSize: number): string {
   return `${lotSize.toFixed(2)} acres`;
 }
 
-function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCountdownSec }: PropertyCardProps) {
+function PropertyCardContent({ property, isBestValue, isHighestValue, onRetry, retryCountdownSec }: PropertyCardProps) {
   const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
   const [isClient, setIsClient] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editValues, setEditValues] = useState<{
@@ -137,6 +140,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
   const [overrides, setOverrides] = useState<Record<string, unknown>>({});
   const [liveValuation, setLiveValuation] = useState<ValuationResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -213,17 +217,17 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
       if (!res.ok) {
         let errorData;
         const contentType = res.headers.get("content-type");
-        
+
         if (contentType && contentType.includes("application/json")) {
           errorData = await res.json().catch(() => ({ error: 'Failed to parse error response' }));
         } else {
           const textBody = await res.text().catch(() => 'No response body');
-          errorData = { 
+          errorData = {
             error: `Server returned ${res.status}: ${res.statusText}`,
             details: textBody.substring(0, 200)
           };
         }
-        
+
         console.error('[PropertyCard] save failed details:', {
           status: res.status,
           statusText: res.statusText,
@@ -240,14 +244,22 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
       toast.success("Property details saved");
     } catch (err) {
       console.error("[PropertyCard] save failed:", err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save changes';
-      toast.error(`Save failed: ${errorMessage}`);
+      const isNetworkError =
+        err instanceof TypeError ||
+        (err instanceof Error && err.message.toLowerCase().includes("fetch"));
+      if (isNetworkError) {
+        toast.error("Network error — check your connection and try again.");
+      } else {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to save changes';
+        toast.error(`Save failed: ${errorMessage}`);
+      }
     } finally {
       setSaving(false);
     }
   };
 
   const handleReset = async () => {
+    setResetting(true);
     try {
       const res = await fetch(
         `/api/property-overrides?address=${encodeURIComponent(property.address)}`,
@@ -257,17 +269,17 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
       if (!res.ok) {
         let errorData;
         const contentType = res.headers.get("content-type");
-        
+
         if (contentType && contentType.includes("application/json")) {
           errorData = await res.json().catch(() => ({ error: 'Failed to parse error response' }));
         } else {
           const textBody = await res.text().catch(() => 'No response body');
-          errorData = { 
+          errorData = {
             error: `Server returned ${res.status}: ${res.statusText}`,
             details: textBody.substring(0, 200)
           };
         }
-        
+
         console.error('[PropertyCard] reset failed details:', {
           status: res.status,
           error: errorData.error,
@@ -281,8 +293,17 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
       toast.success("Reset to original data");
     } catch (err) {
       console.error("[PropertyCard] reset failed:", err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to reset';
-      toast.error(`Reset failed: ${errorMessage}`);
+      const isNetworkError =
+        err instanceof TypeError ||
+        (err instanceof Error && err.message.toLowerCase().includes("fetch"));
+      if (isNetworkError) {
+        toast.error("Network error — check your connection and try again.");
+      } else {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to reset';
+        toast.error(`Reset failed: ${errorMessage}`);
+      }
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -366,27 +387,50 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
     <Card className="overflow-hidden flex flex-col group hover:border-primary/40 hover:shadow-md transition-all duration-200">
       <div className="relative h-44 w-full bg-muted">
         {shouldShowImage ? (
-          <>
-            <Image
-              src={imageSource}
-              alt={streetAddress}
-              fill
-              sizes="(max-width: 768px) 100vw, 33vw"
-              className="object-cover"
-              onError={() => setImageError(true)}
-            />
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"
-            />
-          </>
+          imageLoading ? (
+            <Skeleton className="absolute inset-0 h-full w-full rounded-none" />
+          ) : (
+            <>
+              <Image
+                src={imageSource}
+                alt={streetAddress}
+                fill
+                sizes="(max-width: 768px) 100vw, 33vw"
+                className="object-cover"
+                onError={() => {
+                  setImageError(true);
+                  setImageLoading(false);
+                }}
+              />
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"
+              />
+            </>
+          )
         ) : (
           <div className="flex h-full w-full items-center justify-center text-muted-foreground">
             <Home className="h-10 w-10" aria-hidden="true" />
           </div>
         )}
 
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+        {/* Hidden preloader image — fires onLoad when Street View has fetched, then we swap to the visible <Image>. Keeps the DOM at skeleton-only while loading. */}
+        {shouldShowImage && imageLoading && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSource}
+            alt=""
+            aria-hidden="true"
+            className="sr-only"
+            onLoad={() => setImageLoading(false)}
+            onError={() => {
+              setImageError(true);
+              setImageLoading(false);
+            }}
+          />
+        )}
+
+        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5 z-10">
           {isBestValue && (
             <span className="inline-flex items-center gap-1 rounded-md bg-[hsl(150_55%_42%)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
               <Award className="h-3 w-3" aria-hidden="true" /> Best Value
@@ -400,7 +444,7 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
         </div>
 
         {isClient && (
-          <div className="absolute right-3 top-3">
+          <div className="absolute right-3 top-3 z-10">
             <button
               onClick={() => setEditMode(!editMode)}
               className="inline-flex items-center justify-center rounded-md bg-white/90 hover:bg-white p-2 text-foreground shadow-sm transition-colors"
@@ -415,8 +459,8 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
           </div>
         )}
 
-        {shouldShowImage && (
-          <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none">
+        {shouldShowImage && !imageLoading && (
+          <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none z-10">
             <p className="font-display text-xs font-medium text-white/95 line-clamp-2 drop-shadow-md">
               {streetAddress}
             </p>
@@ -711,24 +755,38 @@ function PropertyCard({ property, isBestValue, isHighestValue, onRetry, retryCou
 
         {isClient && editMode && (
           <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-            <button
+            <Button
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 text-sm bg-primary text-primary-foreground rounded-md py-1.5 font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              loading={saving}
+              className="flex-1"
+              size="sm"
             >
               <Check className="h-3 w-3" aria-hidden="true" />
-              {saving ? "Saving..." : "Save changes"}
-            </button>
-            <button
+              Save changes
+            </Button>
+            <Button
               onClick={handleReset}
-              className="text-sm text-muted-foreground hover:text-foreground px-3"
+              variant="ghost"
+              size="sm"
+              disabled={resetting}
+              loading={resetting}
+              className="px-3"
             >
               Reset
-            </button>
+            </Button>
           </div>
         )}
       </div>
     </Card>
+  );
+}
+
+function PropertyCard(props: PropertyCardProps) {
+  return (
+    <ErrorBoundary context="Property card">
+      <PropertyCardContent {...props} />
+    </ErrorBoundary>
   );
 }
 

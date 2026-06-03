@@ -195,4 +195,5 @@ function QuickAddToPipeline() {
   );
 }
 
+export { QuickAddToPipeline };
 export default QuickAddToPipeline;

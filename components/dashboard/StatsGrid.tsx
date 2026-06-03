@@ -100,6 +100,49 @@ function StatsGrid() {
       })} · FRED`
     : "Source: FRED MORTGAGE30US";
 
+  if (rate.loading) {
+    return (
+      <div className="grid w-full max-w-full grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Properties in Pipeline"
+          value={pipeline.length.toString()}
+          sublabel={
+            pipeline.length === 0
+              ? "Add your first lead below"
+              : "Active across all stages"
+          }
+          icon={Briefcase}
+          accent
+          index={0}
+        />
+        <StatCard
+          label="Comparisons This Month"
+          value={comparisonsThisMonth.toString()}
+          sublabel={`${new Date().toLocaleString("en-US", {
+            month: "long",
+          })} to date`}
+          icon={GitCompare}
+          index={1}
+        />
+        <StatCard
+          label="30-Year Mortgage Rate"
+          value="—"
+          sublabel={rateSublabel}
+          icon={Percent}
+          loading={true}
+          index={2}
+        />
+        <StatCard
+          label="Median Days on Market"
+          value="38"
+          sublabel="Florida · updated weekly"
+          icon={CalendarClock}
+          index={3}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="grid w-full max-w-full grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
@@ -128,7 +171,7 @@ function StatsGrid() {
         value={rate.value ? `${rate.value}%` : "—"}
         sublabel={rateSublabel}
         icon={Percent}
-        loading={rate.loading}
+        loading={false}
         error={rate.error}
         index={2}
       />
@@ -143,4 +186,5 @@ function StatsGrid() {
   );
 }
 
+export { StatsGrid };
 export default StatsGrid;

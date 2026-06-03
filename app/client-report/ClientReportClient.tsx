@@ -144,7 +144,12 @@ function ClientReportInner() {
 
       <ReportPreview
         comparison={selected}
-        branding={branding}
+        branding={{
+          fullName: branding.fullName,
+          phone: branding.phone,
+          email: branding.email,
+          brokerage: branding.brokerage,
+        }}
         clientName={clientName}
       />
     </>

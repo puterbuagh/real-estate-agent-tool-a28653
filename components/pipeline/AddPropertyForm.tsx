@@ -65,7 +65,6 @@ function AddPropertyForm() {
     }
 
     if (parsed.data.website && parsed.data.website.length > 0) {
-      // Honeypot triggered — pretend success
       setAddress("");
       setPrice("");
       setClientName("");
@@ -98,10 +97,20 @@ function AddPropertyForm() {
       setStage("Lead");
       setNotes("");
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to add to pipeline";
-      toast.error(msg);
-      setError(msg);
+      const isNetworkError =
+        err instanceof TypeError ||
+        (err instanceof Error && err.message.toLowerCase().includes("fetch"));
+
+      if (isNetworkError) {
+        toast.error("Network error — check your connection and try again.");
+      } else {
+        const msg =
+          err instanceof Error ? err.message : "Failed to add to pipeline";
+        toast.error(msg);
+      }
+      setError(
+        err instanceof Error ? err.message : "Failed to add to pipeline"
+      );
     } finally {
       setSubmitting(false);
     }

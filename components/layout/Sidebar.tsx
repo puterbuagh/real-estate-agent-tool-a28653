@@ -255,4 +255,5 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   );
 }
 
+export { Sidebar };
 export default Sidebar;
