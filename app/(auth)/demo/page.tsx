@@ -2,34 +2,56 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, Lock } from "lucide-react";
+import { Building2, Lock, Loader2 } from "lucide-react";
 import DemoLoginForm from "@/components/auth/DemoLoginForm";
 import AuthCard from "@/components/auth/AuthCard";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-
-const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || "";
+import { toast } from "sonner";
 
 export default function DemoPage() {
   const [password, setPassword] = useState("");
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState("");
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsValidating(true);
 
-    if (!DEMO_PASSWORD) {
-      setError("Demo password not configured. Contact support.");
-      return;
-    }
+    try {
+      const response = await fetch("/api/demo-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
 
-    if (password === DEMO_PASSWORD) {
-      setIsUnlocked(true);
-      setError("");
-    } else {
-      setError("Incorrect password. Please try again.");
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to validate password");
+      }
+
+      const data = await response.json();
+
+      if (data.isValid) {
+        setIsUnlocked(true);
+        setError("");
+      } else {
+        setError("Incorrect password. Please try again.");
+        setPassword("");
+      }
+    } catch (err) {
+      console.error("Password validation error:", err);
+      const message = err instanceof Error ? err.message : "An error occurred";
+      if (message.includes("not configured")) {
+        toast.error(message);
+      } else {
+        setError(message);
+      }
       setPassword("");
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -88,6 +110,7 @@ export default function DemoPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10"
                       autoFocus
+                      disabled={isValidating}
                     />
                   </div>
                   {error && (
@@ -97,8 +120,20 @@ export default function DemoPage() {
                   )}
                 </div>
 
-                <Button type="submit" className="w-full" size="lg">
-                  Unlock Demo
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={isValidating || !password}
+                >
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Validating...
+                    </>
+                  ) : (
+                    "Unlock Demo"
+                  )}
                 </Button>
               </form>
             ) : (
