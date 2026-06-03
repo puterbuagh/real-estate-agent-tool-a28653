@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAgentBranding } from "@/context/AgentBrandingContext";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import createSupabaseBrowserClient from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -67,17 +68,22 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error("Sign out error:", error);
+        toast.error("Failed to sign out. Please try again.");
+        setSigningOut(false);
+        return;
       }
+      try {
+        window.localStorage.removeItem("agentdesk:agent-branding:v1");
+      } catch {
+        // ignore localStorage errors
+      }
+      router.push("/login");
+      router.refresh();
     } catch (err) {
       console.error("Sign out exception:", err);
+      toast.error("An unexpected error occurred. Please try again.");
+      setSigningOut(false);
     }
-    try {
-      window.localStorage.removeItem("agentdesk:agent-branding:v1");
-    } catch {
-      // ignore localStorage errors
-    }
-    router.push("/login");
-    router.refresh();
   }, [router, signingOut]);
 
   return (
