@@ -64,16 +64,19 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     setSigningOut(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      await supabase.auth.signOut();
-    } catch {
-      // ignore — still redirect to /login
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Sign out error:", error);
+      }
+    } catch (err) {
+      console.error("Sign out exception:", err);
     }
     try {
       window.localStorage.removeItem("agentdesk:agent-branding:v1");
     } catch {
-      // ignore
+      // ignore localStorage errors
     }
-    router.replace("/login");
+    router.push("/login");
     router.refresh();
   }, [router, signingOut]);
 
