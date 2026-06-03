@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import {
   LayoutDashboard,
   GitCompare,
@@ -44,6 +44,20 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const router = useRouter();
   const { branding, initials, isConfigured } = useAgentBranding();
   const [signingOut, setSigningOut] = useState(false);
+  const [isDemoUser, setIsDemoUser] = useState(false);
+
+  useEffect(() => {
+    async function checkDemoUser() {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        setIsDemoUser(user?.email === "demo@agentdesk.app");
+      } catch {
+        setIsDemoUser(false);
+      }
+    }
+    checkDemoUser();
+  }, []);
 
   const isProfileActive = pathname.startsWith("/profile");
 
@@ -247,6 +261,14 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               aria-hidden="true"
             />
           </Link>
+
+          {isDemoUser && (
+            <div className="rounded-md bg-primary/10 px-2 py-1 text-center">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-primary">
+                Demo Mode
+              </span>
+            </div>
+          )}
 
           <button
             type="button"

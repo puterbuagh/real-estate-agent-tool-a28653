@@ -11,7 +11,7 @@ const PROTECTED_PREFIXES = [
   "/email-report",
 ];
 
-const AUTH_ROUTES = ["/login", "/signup"];
+const AUTH_ROUTES = ["/login", "/signup", "/demo"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
