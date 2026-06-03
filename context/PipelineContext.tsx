@@ -15,7 +15,7 @@ import type {
   Comparison,
   ComparisonProperty,
 } from "@/types";
-import createSupabaseBrowserClient from "@/lib/supabase/client";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const PIPELINE_KEY = "agentdesk:pipeline:v1";
 const COMPARISONS_KEY = "agentdesk:comparisons:v1";
