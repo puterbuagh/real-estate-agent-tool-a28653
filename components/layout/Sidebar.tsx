@@ -59,6 +59,10 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     checkDemoUser();
   }, []);
 
+  useEffect(() => {
+    setSigningOut(false);
+  }, [pathname]);
+
   const isProfileActive = pathname.startsWith("/profile");
 
   const displayName =
@@ -93,6 +97,8 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       }
       router.replace("/login");
       router.refresh();
+      // Reset signingOut state after navigation completes
+      setTimeout(() => setSigningOut(false), 100);
     } catch (err) {
       console.error("Sign out exception:", err);
       toast.error("An unexpected error occurred. Please try again.");
