@@ -15,18 +15,30 @@ export async function POST(request: NextRequest) {
     }
 
     if (!DEMO_PASSWORD) {
-      console.error("DEMO_PASSWORD environment variable not configured");
+      console.error("[demo-auth] DEMO_PASSWORD environment variable not configured");
       return NextResponse.json(
         { error: "Demo password not configured. Contact support." },
         { status: 500 }
       );
     }
 
+    // Simple password validation — this route ONLY checks if the provided password
+    // matches the DEMO_PASSWORD env var. It does NOT authenticate the user.
+    // Actual sign-in happens client-side in DemoLoginForm.tsx using Supabase client.
     const isValid = password === DEMO_PASSWORD;
 
-    return NextResponse.json({ isValid });
+    if (!isValid) {
+      console.log("[demo-auth] Invalid password attempt");
+      return NextResponse.json(
+        { error: "Invalid password", isValid: false },
+        { status: 401 }
+      );
+    }
+
+    console.log("[demo-auth] Password validation successful");
+    return NextResponse.json({ isValid: true });
   } catch (error) {
-    console.error("Demo auth error:", error);
+    console.error("[demo-auth] Unexpected error:", error);
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }

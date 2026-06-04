@@ -2,20 +2,35 @@
 -- Run this migration manually in Supabase SQL Editor to create pre-populated demo account
 -- This is a one-time admin operation, not exposed to public
 
--- Insert demo user authentication record
--- Note: This requires admin privileges in Supabase Auth
--- The password hash below is for 'demo123' (bcrypt hashed)
--- You must run this in the Supabase dashboard SQL editor with admin access
-
--- First, create the auth user (this part must be done via Supabase dashboard manually)
--- Go to Authentication > Users > Add User
--- Email: demo@agentdesk.app
--- Password: demo123
--- Auto Confirm User: Yes
--- Then run the below SQL to populate their profile data
-
--- Get the user_id for demo@agentdesk.app
--- Replace 'USER_ID_HERE' with the actual UUID from auth.users after creating the user
+-- ⚠️ CRITICAL SETUP INSTRUCTIONS — READ CAREFULLY ⚠️
+--
+-- This migration creates profile data for demo@agentdesk.app in the agentdesk schema,
+-- but it does NOT create the Supabase Auth user itself.
+--
+-- You MUST manually create the auth.users record via Supabase Dashboard BEFORE running this migration:
+--
+-- 1. In Supabase Dashboard, go to Authentication → Users → Add User:
+--    - Email: demo@agentdesk.app
+--    - Password: demo2024 (or your preferred password)
+--    - Auto Confirm User: Yes
+--
+-- 2. Set DEMO_PASSWORD environment variable in Vercel/your hosting provider:
+--    - This password is ONLY used for /demo page access control validation
+--    - It does NOT need to match the Supabase Auth password
+--    - The /api/demo-auth route only checks if the user entered the correct access code
+--    - Actual authentication happens client-side using the real Supabase password
+--
+-- 3. Then run this SQL migration to populate agentdesk schema tables
+--
+-- WHAT THIS MIGRATION DOES:
+-- - Inserts agent_profiles record for demo@agentdesk.app (if auth.users record exists)
+-- - Inserts sample pipeline_properties records
+-- - Inserts sample property_valuations records
+--
+-- WHAT THIS MIGRATION DOES NOT DO:
+-- - It does NOT create the auth.users record (you must do that manually in Dashboard)
+-- - It does NOT set or validate any passwords
+-- - It does NOT configure authentication
 
 -- Insert agent profile for demo user
 INSERT INTO agentdesk.agent_profiles (
