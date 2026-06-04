@@ -7,7 +7,7 @@ import { Loader2, User, Mail, Lock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import createSupabaseBrowserClient from "@/lib/supabase/client";
 
 const SignupSchema = z
   .object({

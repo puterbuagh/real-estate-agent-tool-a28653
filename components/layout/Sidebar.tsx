@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAgentBranding } from "@/context/AgentBrandingContext";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import createSupabaseBrowserClient from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 interface SidebarProps {
@@ -91,7 +91,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       } catch {
         // ignore localStorage errors
       }
-      router.push("/login");
+      router.replace("/login");
       router.refresh();
     } catch (err) {
       console.error("Sign out exception:", err);

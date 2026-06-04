@@ -8,7 +8,7 @@ import { Loader2, Mail, Lock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import createSupabaseBrowserClient from "@/lib/supabase/client";
 
 const LoginSchema = z.object({
   email: z.string().email("Enter a valid email address"),
