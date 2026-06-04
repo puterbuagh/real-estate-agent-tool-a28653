@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import createSupabaseBrowserClient from "@/lib/supabase/client";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 const DEMO_EMAIL = "demo@agentdesk.app";
@@ -24,6 +24,16 @@ export default function DemoLoginForm({ isUnlocked }: DemoLoginFormProps) {
     setIsLoading(true);
 
     try {
+      // Validate environment variables before attempting sign-in
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        toast.error(
+          "Authentication configuration error. Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY."
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Instantiate Supabase client with anon key
       const supabase = createSupabaseBrowserClient();
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -35,7 +45,7 @@ export default function DemoLoginForm({ isUnlocked }: DemoLoginFormProps) {
         console.error("Demo login error:", error);
         if (error.message.includes("Invalid login credentials")) {
           toast.error(
-            "Demo account not found. Please contact support to set up the demo user."
+            "Demo account not found or incorrect password. Ensure demo@agentdesk.app exists in Supabase Dashboard (Authentication > Users) with password matching the DEMO_PASSWORD environment variable."
           );
         } else {
           toast.error(`Login failed: ${error.message}`);
