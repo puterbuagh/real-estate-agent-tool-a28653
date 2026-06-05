@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   GitCompare,
@@ -14,12 +13,9 @@ import {
   Building2,
   UserCog,
   UserCircle2,
-  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAgentBranding } from "@/context/AgentBrandingContext";
-import createSupabaseBrowserClient from "@/lib/supabase/client";
-import { toast } from "sonner";
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -41,27 +37,7 @@ const settingsItems = [
 
 function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { branding, initials, isConfigured } = useAgentBranding();
-  const [signingOut, setSigningOut] = useState(false);
-  const [isDemoUser, setIsDemoUser] = useState(false);
-
-  useEffect(() => {
-    async function checkDemoUser() {
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        setIsDemoUser(user?.email === "demo@agentdesk.app");
-      } catch {
-        setIsDemoUser(false);
-      }
-    }
-    checkDemoUser();
-  }, []);
-
-  useEffect(() => {
-    setSigningOut(false);
-  }, [pathname]);
 
   const isProfileActive = pathname.startsWith("/profile");
 
@@ -77,34 +53,6 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     }
     return "Realtor®";
   })();
-
-  const handleSignOut = useCallback(async () => {
-    if (signingOut) return;
-    setSigningOut(true);
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("Sign out error:", error);
-        toast.error("Failed to sign out. Please try again.");
-        setSigningOut(false);
-        return;
-      }
-      try {
-        window.localStorage.removeItem("agentdesk:agent-branding:v1");
-      } catch {
-        // ignore localStorage errors
-      }
-      router.replace("/login");
-      router.refresh();
-      // Reset signingOut state after navigation completes
-      setTimeout(() => setSigningOut(false), 100);
-    } catch (err) {
-      console.error("Sign out exception:", err);
-      toast.error("An unexpected error occurred. Please try again.");
-      setSigningOut(false);
-    }
-  }, [router, signingOut]);
 
   return (
     <>
@@ -267,25 +215,6 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               aria-hidden="true"
             />
           </Link>
-
-          {isDemoUser && (
-            <div className="rounded-md bg-primary/10 px-2 py-1 text-center">
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-primary">
-                Demo Mode
-              </span>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleSignOut}
-            disabled={signingOut}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/60 transition-colors hover:bg-sidebar-foreground/5 hover:text-sidebar-foreground disabled:opacity-50"
-            aria-label="Sign out"
-          >
-            <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
-            <span>{signingOut ? "Signing out…" : "Sign out"}</span>
-          </button>
         </div>
       </aside>
     </>

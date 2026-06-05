@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase/server";
 import { fetchPropertyByAddress, fetchComparableSales } from "@/lib/attom";
 import { createHash } from "crypto";
 import { calculateAgentDeskEstimate } from "@/lib/valuation";
@@ -14,10 +13,10 @@ const RATE_LIMIT_MAX = 20;
 
 const rateBuckets = new Map<string, number[]>();
 
-function checkRateLimit(userId: string): { ok: boolean; retryAfterSec: number } {
+function checkRateLimit(clientId: string): { ok: boolean; retryAfterSec: number } {
   const now = Date.now();
   const cutoff = now - RATE_LIMIT_WINDOW_MS;
-  const prior = rateBuckets.get(userId) ?? [];
+  const prior = rateBuckets.get(clientId) ?? [];
   const recent = prior.filter((t) => t > cutoff);
 
   if (recent.length >= RATE_LIMIT_MAX) {
@@ -27,7 +26,7 @@ function checkRateLimit(userId: string): { ok: boolean; retryAfterSec: number } 
   }
 
   recent.push(now);
-  rateBuckets.set(userId, recent);
+  rateBuckets.set(clientId, recent);
 
   if (rateBuckets.size > 5000) {
     for (const [k, v] of rateBuckets) {
@@ -40,32 +39,8 @@ function checkRateLimit(userId: string): { ok: boolean; retryAfterSec: number } 
   return { ok: true, retryAfterSec: 0 };
 }
 
-async function requireUser(): Promise<
-  { ok: true; userId: string } | { ok: false; response: NextResponse }
-> {
-  const supabase = createServerClient();
-  if (!supabase) {
-    return { ok: true, userId: "anonymous" };
-  }
-
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error || !user) {
-      return { ok: true, userId: "anonymous" };
-    }
-
-    return { ok: true, userId: user.id };
-  } catch {
-    return { ok: true, userId: "anonymous" };
-  }
-}
-
-function enforceRateLimit(userId: string): NextResponse | null {
-  const rl = checkRateLimit(userId);
+function enforceRateLimit(clientId: string): NextResponse | null {
+  const rl = checkRateLimit(clientId);
   if (rl.ok) return null;
   return NextResponse.json(
     {
@@ -189,31 +164,6 @@ function hashAddress(address: string): string {
     .digest("hex");
 }
 
-async function loadPropertyOverrides(
-  userId: string,
-  addressHash: string
-): Promise<PropertyOverrides | null> {
-  const supabase = createServerClient();
-  if (!supabase || userId === "anonymous") return null;
-
-  try {
-    const { data } = await supabase
-      .from("property_overrides")
-      .select("overrides")
-      .eq("user_id", userId)
-      .eq("address_hash", addressHash)
-      .single();
-
-    if (data?.overrides) {
-      return data.overrides as PropertyOverrides;
-    }
-  } catch (err) {
-    console.warn("[property-lookup] failed to load overrides:", err);
-  }
-
-  return null;
-}
-
 function applyOverrides(
   property: ZillowProperty,
   overrides: PropertyOverrides | null
@@ -236,8 +186,7 @@ async function calculateValuation(
   property: ZillowProperty,
   address: string,
   latitude: number,
-  longitude: number,
-  userId: string
+  longitude: number
 ): Promise<{
   valuation: ValuationResult | null;
   valuationInputs: ValuationInputs | null;
@@ -248,39 +197,6 @@ async function calculateValuation(
     !property.livingArea
   ) {
     return { valuation: null, valuationInputs: null };
-  }
-
-  const supabase = createServerClient();
-  if (!supabase) return { valuation: null, valuationInputs: null };
-
-  const addressHash = hashAddress(address);
-
-  try {
-    const { data: cached } = await supabase
-      .from("property_valuations")
-      .select("*")
-      .eq("address_hash", addressHash)
-      .gt("expires_at", new Date().toISOString())
-      .single();
-
-    if (cached) {
-      const valuation: ValuationResult = {
-        estimate: Number(cached.agentdesk_estimate),
-        variancePct: Number(cached.variance_pct),
-        varianceLow: Number(cached.variance_low),
-        varianceHigh: Number(cached.variance_high),
-        confidence: cached.confidence as "high" | "medium" | "low",
-        compCount: cached.comp_count,
-      };
-
-      const valuationInputs: ValuationInputs | null = cached.inputs
-        ? (cached.inputs as ValuationInputs)
-        : null;
-
-      return { valuation, valuationInputs };
-    }
-  } catch (err) {
-    console.warn("[property-lookup] cache check failed:", err);
   }
 
   let currentMortgageRate = 7.0;
@@ -308,33 +224,14 @@ async function calculateValuation(
 
   const valuation = calculateAgentDeskEstimate(valuationInputs);
 
-  try {
-    await supabase.from("property_valuations").upsert({
-      address_hash: addressHash,
-      address,
-      agentdesk_estimate: valuation.estimate,
-      variance_pct: valuation.variancePct,
-      variance_low: valuation.varianceLow,
-      variance_high: valuation.varianceHigh,
-      confidence: valuation.confidence,
-      comp_count: valuation.compCount,
-      inputs: valuationInputs,
-      calculated_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    });
-  } catch (err) {
-    console.warn("[property-lookup] cache upsert failed:", err);
-  }
-
   return { valuation, valuationInputs };
 }
 
 export async function GET(req: NextRequest) {
   const startedAt = Date.now();
-  const auth = await requireUser();
-  if (!auth.ok) return auth.response;
+  const clientId = "anonymous";
 
-  const limited = enforceRateLimit(auth.userId);
+  const limited = enforceRateLimit(clientId);
   if (limited) return limited;
 
   const address = req.nextUrl.searchParams.get("address");
@@ -342,7 +239,7 @@ export async function GET(req: NextRequest) {
   const lngParam = req.nextUrl.searchParams.get("longitude");
 
   console.log(
-    `[property-lookup GET] address="${sanitizeForLog(address)}" lat=${latParam} lng=${lngParam} user=${auth.userId}`
+    `[property-lookup GET] address="${sanitizeForLog(address)}" lat=${latParam} lng=${lngParam} client=anonymous`
   );
 
   if (!address?.trim()) {
@@ -426,16 +323,11 @@ export async function GET(req: NextRequest) {
     let valuationInputs: ValuationInputs | null = null;
 
     if (property.status === "ok") {
-      const addressHash = hashAddress(address.trim());
-      const overrides = await loadPropertyOverrides(auth.userId, addressHash);
-      property = applyOverrides(property, overrides);
-
       const valuationData = await calculateValuation(
         property,
         address.trim(),
         latitude,
-        longitude,
-        auth.userId
+        longitude
       );
       agentDeskValuation = valuationData.valuation;
       valuationInputs = valuationData.valuationInputs;
@@ -497,10 +389,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
-  const auth = await requireUser();
-  if (!auth.ok) return auth.response;
+  const clientId = "anonymous";
 
-  const limited = enforceRateLimit(auth.userId);
+  const limited = enforceRateLimit(clientId);
   if (limited) return limited;
 
   let body: unknown;
@@ -554,9 +445,7 @@ export async function POST(req: NextRequest) {
   });
 
   console.log(
-    `[property-lookup POST] LOOKUP REQUEST: batch=${entries.length} user=${
-      auth.userId
-    } addresses=${JSON.stringify(
+    `[property-lookup POST] LOOKUP REQUEST: batch=${entries.length} client=anonymous addresses=${JSON.stringify(
       entries.map((e) => ({
         address: sanitizeForLog(e.address, 40),
         lat: e.latitude,
@@ -655,16 +544,11 @@ export async function POST(req: NextRequest) {
         let valuationInputs: ValuationInputs | null = null;
 
         if (result.status === "ok") {
-          const addressHash = hashAddress(item.address);
-          const overrides = await loadPropertyOverrides(auth.userId, addressHash);
-          result = applyOverrides(result, overrides);
-
           const valuationData = await calculateValuation(
             result,
             item.address,
             item.latitude,
-            item.longitude,
-            auth.userId
+            item.longitude
           );
           agentDeskValuation = valuationData.valuation;
           valuationInputs = valuationData.valuationInputs;
