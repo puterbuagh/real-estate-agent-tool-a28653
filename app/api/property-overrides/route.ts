@@ -13,38 +13,6 @@ function hashAddress(address: string): string {
     .digest("hex");
 }
 
-function readFromStorage(addressHash: string): unknown {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${addressHash}`);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function writeToStorage(addressHash: string, overrides: unknown): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(
-      `${STORAGE_KEY_PREFIX}${addressHash}`,
-      JSON.stringify(overrides)
-    );
-  } catch {
-    // ignore quota errors
-  }
-}
-
-function deleteFromStorage(addressHash: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(`${STORAGE_KEY_PREFIX}${addressHash}`);
-  } catch {
-    // ignore
-  }
-}
-
 export async function POST(req: NextRequest) {
   console.log("[property-overrides POST] Request received (localStorage-only mode)");
 
@@ -84,16 +52,18 @@ export async function POST(req: NextRequest) {
   console.log("[property-overrides POST] Overrides:", JSON.stringify(overrides));
 
   const addressHash = hashAddress(address);
-  console.log("[property-overrides POST] Address hash:", addressHash);
+  const storageKey = `${STORAGE_KEY_PREFIX}${addressHash}`;
+  console.log("[property-overrides POST] Storage key:", storageKey);
 
   const data = {
     address,
     addressHash,
+    storageKey,
     overrides,
     updatedAt: new Date().toISOString(),
   };
 
-  console.log("[property-overrides POST] Save successful (localStorage):", JSON.stringify(data));
+  console.log("[property-overrides POST] Save successful (localStorage-only):", JSON.stringify(data));
   return NextResponse.json({ ok: true, data });
 }
 
@@ -112,14 +82,16 @@ export async function DELETE(req: NextRequest) {
   console.log("[property-overrides DELETE] Address:", address);
 
   const addressHash = hashAddress(address);
-  console.log("[property-overrides DELETE] Address hash:", addressHash);
+  const storageKey = `${STORAGE_KEY_PREFIX}${addressHash}`;
+  console.log("[property-overrides DELETE] Storage key:", storageKey);
 
   const data = {
     address,
     addressHash,
+    storageKey,
     deletedAt: new Date().toISOString(),
   };
 
-  console.log("[property-overrides DELETE] Delete successful (localStorage):", JSON.stringify(data));
+  console.log("[property-overrides DELETE] Delete successful (localStorage-only):", JSON.stringify(data));
   return NextResponse.json({ ok: true, data });
 }
