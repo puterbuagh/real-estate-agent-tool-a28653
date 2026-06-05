@@ -22,7 +22,7 @@ function PipelineCard({ item }: PipelineCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [addressDraft, setAddressDraft] = useState(item.address);
   const [stageDraft, setStageDraft] = useState<PipelineStage>(item.stage);
   const [clientNameDraft, setClientNameDraft] = useState(item.clientName ?? "");
@@ -37,7 +37,7 @@ function PipelineCard({ item }: PipelineCardProps) {
   const isStale = days > 14;
 
   function handleDragStart(e: React.DragEvent<HTMLDivElement>) {
-    if (editMode) return;
+    if (isEditing) return;
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", item.id);
     setIsDragging(true);
@@ -89,7 +89,7 @@ function PipelineCard({ item }: PipelineCardProps) {
         ? item.price.toString()
         : ""
     );
-    setEditMode(true);
+    setIsEditing(true);
   }
 
   function handleEditCancel() {
@@ -101,7 +101,7 @@ function PipelineCard({ item }: PipelineCardProps) {
         ? item.price.toString()
         : ""
     );
-    setEditMode(false);
+    setIsEditing(false);
   }
 
   function handleEditSave() {
@@ -123,11 +123,7 @@ function PipelineCard({ item }: PipelineCardProps) {
         price: priceNum && Number.isFinite(priceNum) ? priceNum : undefined,
       });
 
-      // Exit edit mode immediately and synchronously after the update call.
-      // Context update is synchronous (setPipeline), so by the time this runs
-      // the state has been queued. React will batch the editMode change with
-      // the next render triggered by the context update.
-      setEditMode(false);
+      setIsEditing(false);
       toast.success("Card updated");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to update card";
@@ -139,21 +135,21 @@ function PipelineCard({ item }: PipelineCardProps) {
 
   return (
     <Card
-      draggable={!editMode}
+      draggable={!isEditing}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       className={cn(
         "group p-3.5 select-none",
         "transition-all duration-200",
-        !editMode && "cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-lg hover:-translate-y-0.5",
+        !isEditing && "cursor-grab active:cursor-grabbing hover:border-primary/40 hover:shadow-lg hover:-translate-y-0.5",
         isDragging && "opacity-50 rotate-1 shadow-xl ring-2 ring-primary/40",
-        editMode && "ring-2 ring-primary/60 shadow-lg"
+        isEditing && "ring-2 ring-primary/60 shadow-lg"
       )}
     >
       <div className="flex items-start gap-2">
         <MapPin className="size-4 text-primary mt-0.5 shrink-0" aria-hidden="true" />
         <div className="flex-1 min-w-0">
-          {editMode ? (
+          {isEditing ? (
             <div className="space-y-2">
               <Input
                 type="text"
@@ -200,7 +196,7 @@ function PipelineCard({ item }: PipelineCardProps) {
             </>
           )}
         </div>
-        {!editMode && (
+        {!isEditing && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button
               type="button"
@@ -228,7 +224,7 @@ function PipelineCard({ item }: PipelineCardProps) {
         )}
       </div>
 
-      {editMode && (
+      {isEditing && (
         <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-border">
           <Button
             type="button"
@@ -254,14 +250,14 @@ function PipelineCard({ item }: PipelineCardProps) {
         </div>
       )}
 
-      {!editMode && item.clientName && (
+      {!isEditing && item.clientName && (
         <div className="flex items-center gap-1.5 mt-2.5 text-xs text-muted-foreground">
           <User className="size-3" aria-hidden="true" />
           <span className="font-display tracking-tight truncate">{item.clientName}</span>
         </div>
       )}
 
-      {!editMode && (
+      {!isEditing && (
         <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-border">
           <span
             className={cn(
@@ -291,7 +287,7 @@ function PipelineCard({ item }: PipelineCardProps) {
         </div>
       )}
 
-      {!editMode && notesOpen && (
+      {!isEditing && notesOpen && (
         <div className="mt-3 space-y-2">
           <textarea
             value={notesDraft}
