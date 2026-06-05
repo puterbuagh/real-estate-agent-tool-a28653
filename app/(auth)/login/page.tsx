@@ -1,5 +1,13 @@
-import { redirect } from "next/navigation";
+import AuthCard from "@/components/auth/AuthCard";
+import LoginForm from "@/components/auth/LoginForm";
 
 export default function LoginPage() {
-  redirect("/");
+  return (
+    <AuthCard
+      title="Welcome back"
+      subtitle="Sign in to your AgentDesk account."
+    >
+      <LoginForm />
+    </AuthCard>
+  );
 }

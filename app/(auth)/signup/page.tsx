@@ -1,5 +1,13 @@
-import { redirect } from "next/navigation";
+import SignupForm from "@/components/auth/SignupForm";
+import AuthCard from "@/components/auth/AuthCard";
 
 export default function SignupPage() {
-  redirect("/");
+  return (
+    <AuthCard
+      title="Create your account"
+      subtitle="Start building your real estate business with AgentDesk"
+    >
+      <SignupForm />
+    </AuthCard>
+  );
 }
