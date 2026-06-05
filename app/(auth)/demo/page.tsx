@@ -1,6 +1,8 @@
 import AuthCard from "@/components/auth/AuthCard";
 import DemoLoginForm from "@/components/auth/DemoLoginForm";
 
+export const dynamic = 'force-dynamic';
+
 export default function DemoPage() {
   return (
     <AuthCard

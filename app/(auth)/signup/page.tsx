@@ -1,6 +1,8 @@
 import SignupForm from "@/components/auth/SignupForm";
 import AuthCard from "@/components/auth/AuthCard";
 
+export const dynamic = 'force-dynamic';
+
 export default function SignupPage() {
   return (
     <AuthCard
