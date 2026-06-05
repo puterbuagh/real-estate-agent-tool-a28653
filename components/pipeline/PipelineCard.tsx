@@ -104,7 +104,7 @@ function PipelineCard({ item }: PipelineCardProps) {
     setEditMode(false);
   }
 
-  async function handleEditSave() {
+  function handleEditSave() {
     if (!addressDraft.trim()) {
       toast.error("Address is required");
       return;
@@ -123,8 +123,12 @@ function PipelineCard({ item }: PipelineCardProps) {
         price: priceNum && Number.isFinite(priceNum) ? priceNum : undefined,
       });
 
-      toast.success("Card updated");
+      // Exit edit mode immediately and synchronously after the update call.
+      // Context update is synchronous (setPipeline), so by the time this runs
+      // the state has been queued. React will batch the editMode change with
+      // the next render triggered by the context update.
       setEditMode(false);
+      toast.success("Card updated");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to update card";
       toast.error(msg);

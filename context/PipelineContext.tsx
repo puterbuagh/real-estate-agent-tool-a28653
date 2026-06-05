@@ -38,6 +38,10 @@ export interface PipelineContextValue {
   removePipelineItem: (id: string) => void;
   updatePipelineStage: (id: string, stage: PipelineStage) => void;
   updatePipelineNotes: (id: string, notes: string) => void;
+  updatePipelineItem: (
+    id: string,
+    updates: Partial<Pick<PipelineItem, "address" | "stage" | "price" | "clientName">>
+  ) => void;
   addComparison: (
     properties: ComparisonProperty[],
     label?: string
@@ -56,6 +60,7 @@ const DEFAULT_CONTEXT: PipelineContextValue = {
   removePipelineItem: () => {},
   updatePipelineStage: () => {},
   updatePipelineNotes: () => {},
+  updatePipelineItem: () => {},
   addComparison: () => null,
   deleteComparison: () => {},
   getComparisonById: () => undefined,
@@ -179,8 +184,8 @@ function PipelineProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     try {
       writeLocalStorage(PIPELINE_KEY, JSON.stringify(pipeline));
-    } catch (err) {
-      console.error("[PipelineContext] localStorage write error:", err);
+    } catch {
+      // ignore
     }
   }, [pipeline, hydrated]);
 
@@ -216,10 +221,7 @@ function PipelineProvider({ children }: { children: ReactNode }) {
           notes: addressOrInput.notes ?? "",
         };
       }
-      setPipeline((prev) => {
-        const next = [item, ...prev];
-        return next;
-      });
+      setPipeline((prev) => [...prev, item]);
     },
     []
   );
@@ -243,8 +245,30 @@ function PipelineProvider({ children }: { children: ReactNode }) {
   );
 
   const updatePipelineNotes = useCallback((id: string, notes: string) => {
-    setPipeline((prev) => prev.map((p) => (p.id === id ? { ...p, notes } : p)));
+    setPipeline((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, notes } : p))
+    );
   }, []);
+
+  const updatePipelineItem = useCallback(
+    (
+      id: string,
+      updates: Partial<Pick<PipelineItem, "address" | "stage" | "price" | "clientName">>
+    ) => {
+      setPipeline((prev) =>
+        prev.map((p) => {
+          if (p.id !== id) return p;
+          const stageChanged = updates.stage && updates.stage !== p.stage;
+          return {
+            ...p,
+            ...updates,
+            stageEnteredAt: stageChanged ? new Date().toISOString() : p.stageEnteredAt,
+          };
+        })
+      );
+    },
+    []
+  );
 
   const addComparison = useCallback(
     (properties: ComparisonProperty[], label?: string): Comparison | null => {
@@ -266,10 +290,7 @@ function PipelineProvider({ children }: { children: ReactNode }) {
         clientName: null,
         label: label,
       };
-      setComparisons((prev) => {
-        const next = [entry, ...prev];
-        return next;
-      });
+      setComparisons((prev) => [...prev, entry]);
       return entry;
     },
     []
@@ -321,6 +342,7 @@ function PipelineProvider({ children }: { children: ReactNode }) {
       removePipelineItem,
       updatePipelineStage,
       updatePipelineNotes,
+      updatePipelineItem,
       addComparison,
       deleteComparison,
       getComparisonById,
@@ -335,6 +357,7 @@ function PipelineProvider({ children }: { children: ReactNode }) {
       removePipelineItem,
       updatePipelineStage,
       updatePipelineNotes,
+      updatePipelineItem,
       addComparison,
       deleteComparison,
       getComparisonById,

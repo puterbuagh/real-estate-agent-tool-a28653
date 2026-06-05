@@ -104,7 +104,9 @@ function KanbanBoard() {
                   {isDropTarget ? "Drop to move here" : "Drag a card here"}
                 </div>
               ) : (
-                items.map((item) => <PipelineCard key={item.id} item={item} />)
+                items.map((item) => (
+                  <PipelineCard key={item.id} item={item} />
+                ))
               )}
             </div>
           </div>
